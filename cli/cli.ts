@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { log } from "./lib/logger";
 
 const command = process.argv[2];
@@ -18,7 +19,7 @@ async function main() {
             await (await import("./commands/backup")).default(args);
             break;
         default:
-            log.info("Usage: bun run deploy <command> [options]");
+            log.info("Usage: og-deploy <command> [options]");
             log.info("Commands:");
             log.info("  package  - Builds a ZIP for cPanel upload (includes DB & SMTP)");
             log.info("  db:push  - Exports local DB -> production-ready SQL");

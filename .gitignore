@@ -1,6 +1,28 @@
+# Environment & Secrets
 .env
-.env.production
+.env.*
+!.env.example
+
+# Dependencies
 node_modules/
+
+# Local build artifacts & staging
+.staging/
+dist/
+build/
 backups/
 *.zip
-.staging/
+*.tar.gz
+*.sql
+
+# Compiled CLI binaries
+og-deploy
+og-deploy.exe
+og-deploy-linux*
+og-deploy-macos*
+og-deploy-windows*
+*.exe
+
+# OS generated files
+.DS_Store
+Thumbs.db

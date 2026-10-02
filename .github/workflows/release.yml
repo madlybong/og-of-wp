@@ -1,0 +1,69 @@
+name: Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release Assets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install CLI dependencies
+        run: bun install --frozen-lockfile || bun install
+
+      - name: Package WordPress Plugin ZIP
+        run: |
+          VERSION="${GITHUB_REF_NAME:-v1.0.0}"
+          echo "Packaging WordPress plugin for release: $VERSION"
+          mkdir -p build/og-of-wp
+          cp og-of-wp.php build/og-of-wp/
+          cp -r includes build/og-of-wp/
+          cp -r admin build/og-of-wp/
+          cp README.md build/og-of-wp/
+          cp LICENSE build/og-of-wp/
+          cp CHANGELOG.md build/og-of-wp/
+          cd build
+          zip -r "../og-of-wp-${VERSION}.zip" og-of-wp
+          cd ..
+          rm -rf build
+
+      - name: Compile CLI Binaries for All Platforms
+        run: |
+          mkdir -p dist
+          echo "Compiling Linux x64 binary..."
+          bun build ./cli/cli.ts --compile --target=bun-linux-x64 --outfile dist/og-deploy-linux
+          chmod +x dist/og-deploy-linux
+
+          echo "Compiling macOS arm64 binary..."
+          bun build ./cli/cli.ts --compile --target=bun-darwin-arm64 --outfile dist/og-deploy-macos
+          chmod +x dist/og-deploy-macos
+
+          echo "Compiling Windows x64 binary..."
+          bun build ./cli/cli.ts --compile --target=bun-windows-x64 --outfile dist/og-deploy.exe
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            og-of-wp-*.zip
+            dist/og-deploy-linux
+            dist/og-deploy-macos
+            dist/og-deploy.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false

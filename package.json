@@ -1,13 +1,32 @@
 {
   "name": "og-of-wp",
   "version": "1.0.0",
+  "description": "The Original Gangster of WordPress: All-in-One Modular Security, Utilities & Modern Deploy CLI",
   "bin": {
     "og-deploy": "./cli/cli.ts"
   },
   "scripts": {
     "start": "bun run ./cli/cli.ts",
-    "build:exe": "bun build ./cli/cli.ts --compile --outfile og-deploy"
+    "build:exe": "bun build ./cli/cli.ts --compile --outfile og-deploy",
+    "build:exe:linux": "bun build ./cli/cli.ts --compile --target=bun-linux-x64 --outfile og-deploy-linux",
+    "build:exe:macos": "bun build ./cli/cli.ts --compile --target=bun-darwin-arm64 --outfile og-deploy-macos",
+    "build:exe:win": "bun build ./cli/cli.ts --compile --target=bun-windows-x64 --outfile og-deploy.exe"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/madlybong/og-of-wp.git"
+  },
+  "keywords": [
+    "wordpress",
+    "wordpress-plugin",
+    "security",
+    "waf",
+    "audit",
+    "deploy-cli",
+    "bun"
+  ],
+  "author": "Astrake",
+  "license": "GPL-2.0-or-later",
   "devDependencies": {
     "@types/bun": "latest"
   },
