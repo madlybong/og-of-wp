@@ -1,0 +1,13 @@
+{
+  "name": "zero-sugar-deploy-cli",
+  "version": "1.0.0",
+  "scripts": {
+    "deploy": "bun run cli.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "dependencies": {
+    "enquirer": "^2.4.1"
+  }
+}

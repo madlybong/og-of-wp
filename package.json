@@ -1,0 +1,17 @@
+{
+  "name": "og-of-wp",
+  "version": "1.0.0",
+  "bin": {
+    "og-deploy": "./cli/cli.ts"
+  },
+  "scripts": {
+    "start": "bun run ./cli/cli.ts",
+    "build:exe": "bun build ./cli/cli.ts --compile --outfile og-deploy"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "dependencies": {
+    "enquirer": "^2.4.1"
+  }
+}
