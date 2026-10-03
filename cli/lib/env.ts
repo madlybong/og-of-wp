@@ -61,6 +61,39 @@ export async function getEnv(): Promise<EnvConfig> {
     let localEnv = parseEnv(".env");
     let prodEnv = parseEnv(".env.production");
 
+    const autoDetectExecutable = (name: string, commonPaths: string[]) => {
+        const inPath = Bun.which(name);
+        if (inPath) return inPath;
+        for (const p of commonPaths) {
+            if (existsSync(p)) return p;
+        }
+        return name; // Fallback to bare command
+    };
+
+    if (!localEnv["MYSQLDUMP_PATH"]) {
+        localEnv["MYSQLDUMP_PATH"] = autoDetectExecutable("mysqldump", [
+            "C:\\xampp\\mysql\\bin\\mysqldump.exe",
+            "/usr/bin/mysqldump",
+            "/usr/local/bin/mysqldump"
+        ]);
+    }
+    if (!localEnv["MYSQL_PATH"]) {
+        localEnv["MYSQL_PATH"] = autoDetectExecutable("mysql", [
+            "C:\\xampp\\mysql\\bin\\mysql.exe",
+            "/usr/bin/mysql",
+            "/usr/local/bin/mysql"
+        ]);
+    }
+    if (!localEnv["SEVENZIP_PATH"]) {
+        localEnv["SEVENZIP_PATH"] = autoDetectExecutable("7z", [
+            "C:\\Program Files\\7-Zip\\7z.exe",
+            "C:\\Program Files (x86)\\7-Zip\\7z.exe",
+            "/usr/bin/7z",
+            "/usr/local/bin/7z",
+            "zip"
+        ]);
+    }
+
     log.info("Please verify your local environment configuration (Press Enter to accept defaults):");
     for (const key of LOCAL_KEYS) {
         if (key === "LOCAL_WP_PATH") {
