@@ -181,6 +181,39 @@ The GitHub Actions pipeline will:
 
 ---
 
+## 🤝 Contributor Setup Guide
+
+We have bundled a local testing architecture to help you develop the plugin instantly without complex symlinks.
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/madlybong/og-of-wp.git
+   cd og-of-wp
+   ```
+2. **Install CLI Dependencies:**
+   ```bash
+   bun install
+   ```
+3. **Initialize the local WordPress Testing Environment:**
+   The repository safely tracks a local `wordpress/` core directory but ignores your local credentials.
+   ```bash
+   # Create a MySQL database locally (e.g. 'og_of_wp_test')
+   # Navigate into the local WordPress directory
+   cd wordpress
+   
+   # Use WP-CLI to generate your local config
+   wp config create --dbname=og_of_wp_test --dbuser=root --dbpass=root
+   
+   # Install WordPress core
+   wp core install --url="http://localhost/og-of-wp/wordpress" --title="OG of WP Test" --admin_user=admin --admin_password=admin --admin_email=test@test.com
+   
+   # Activate our custom proxy loader
+   wp plugin activate og-of-wp
+   ```
+   **Note:** The proxy loader (`wordpress/wp-content/plugins/og-of-wp.php`) dynamically executes the plugin code directly from the root repository, meaning your IDE changes are reflected instantly!
+
+---
+
 ## 🤝 Contributing
 
 Contributions, issues, and feature requests are welcome!

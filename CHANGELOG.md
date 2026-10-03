@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-10-03
+
+### Added
+- **Premium Email Module**:
+  - Full Asynchronous Queue architecture with 0ms background sending loopbacks.
+  - Smart Multi-Routing conditional rules (route by subject, domain, sender).
+  - High-availability Automated Failover Matrix (Primary API -> Backup SMTP).
+  - Pure PHP Amazon SES integration via AWS SigV4 (no SDK bloat).
+  - Deliverability Health Scorecard with live DNS SPF/DMARC checks.
+- **Unified Ecosystem Testing**: Added a self-contained local testing architecture using a proxy loader pattern and Bun sync scripts to synchronize releases seamlessly.
+
 ## [1.0.0] - 2026-10-03
 
 ### Added

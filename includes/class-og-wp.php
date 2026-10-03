@@ -69,6 +69,7 @@ class OG_WP {
 			'duplicator'=> 'class-og-wp-duplicator.php',
 			'porter'    => 'class-og-wp-porter.php',
 			'media_cleaner' => 'class-og-wp-media-cleaner.php',
+			'email'     => 'class-og-wp-email.php',
 			'branding'  => 'class-og-wp-branding.php',
 		];
 
@@ -92,6 +93,17 @@ class OG_WP {
 		// Always load branding
 		require_once OG_WP_PLUGIN_DIR . 'includes/modules/class-og-wp-branding.php';
 		new OG_WP_Branding( $options );
+
+		// In admin area, ensure Email module is loaded for test sends, log viewer, and DNS checker
+		if ( is_admin() && empty( $options['enable_module_email'] ) ) {
+			$email_file = OG_WP_PLUGIN_DIR . 'includes/modules/class-og-wp-email.php';
+			if ( file_exists( $email_file ) ) {
+				require_once $email_file;
+				if ( class_exists( 'OG_WP_Email' ) ) {
+					new OG_WP_Email( $options );
+				}
+			}
+		}
 	}
 
 	public function run() {

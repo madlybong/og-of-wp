@@ -1,6 +1,6 @@
 {
   "name": "og-of-wp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "The Original Gangster of WordPress: All-in-One Modular Security, Utilities & Modern Deploy CLI",
   "bin": {
     "og-deploy": "./cli/cli.ts"

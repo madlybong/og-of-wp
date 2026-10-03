@@ -22,6 +22,9 @@ export interface EnvConfig {
     SMTP_PORT: string;
     SMTP_USER: string;
     SMTP_PASS: string;
+    PROD_WP_ADMIN_USER: string;
+    PROD_WP_ADMIN_PASS: string;
+    PROD_WP_ADMIN_EMAIL: string;
 }
 
 const LOCAL_KEYS = [
@@ -32,10 +35,10 @@ const LOCAL_KEYS = [
 const PROD_KEYS = [
     "PROD_URL", "PROD_DB_NAME", "PROD_DB_USER", "PROD_DB_PASS",
     "PROD_DB_HOST", "WP_TABLE_PREFIX", "SMTP_HOST", "SMTP_PORT",
-    "SMTP_USER", "SMTP_PASS"
+    "SMTP_USER", "SMTP_PASS", "PROD_WP_ADMIN_USER", "PROD_WP_ADMIN_PASS", "PROD_WP_ADMIN_EMAIL"
 ];
 
-const PASSWORD_KEYS = ["LOCAL_DB_PASS", "PROD_DB_PASS", "SMTP_PASS"];
+const PASSWORD_KEYS = ["LOCAL_DB_PASS", "PROD_DB_PASS", "SMTP_PASS", "PROD_WP_ADMIN_PASS"];
 
 export async function getEnv(): Promise<EnvConfig> {
     const parseEnv = (path: string) => {
@@ -117,15 +120,30 @@ export async function getEnv(): Promise<EnvConfig> {
     writeFileSync(".env", Object.entries(localEnv).map(([k, v]) => `${k}=${v}`).join("\n"));
 
     log.info("Please verify your production environment configuration (Press Enter to accept defaults):");
-    for (const key of PROD_KEYS) {
-        const isPassword = PASSWORD_KEYS.includes(key);
-        const response: any = await prompt({
-            type: isPassword ? 'password' : 'input',
-            name: key,
-            message: `Enter value for ${key}:`,
-            initial: prodEnv[key] || ""
-        });
-        prodEnv[key] = response[key];
+    
+    // Auto-generate missing admin credentials
+    if (!prodEnv["PROD_WP_ADMIN_USER"]) prodEnv["PROD_WP_ADMIN_USER"] = "admin_zsec";
+    if (!prodEnv["PROD_WP_ADMIN_PASS"]) {
+        const crypto = require("crypto");
+        prodEnv["PROD_WP_ADMIN_PASS"] = crypto.randomBytes(16).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 24);
+        log.info("Generated new secure password for PROD_WP_ADMIN_PASS");
+    }
+    if (!prodEnv["PROD_WP_ADMIN_EMAIL"]) prodEnv["PROD_WP_ADMIN_EMAIL"] = "admin@example.com";
+
+    // If running in CI environment, skip prompting and use what we have (or what we just generated)
+    if (!process.env.CI) {
+        for (const key of PROD_KEYS) {
+            const isPassword = PASSWORD_KEYS.includes(key);
+            const response: any = await prompt({
+                type: isPassword ? 'password' : 'input',
+                name: key,
+                message: `Enter value for ${key}:`,
+                initial: prodEnv[key] || ""
+            });
+            prodEnv[key] = response[key];
+        }
+    } else {
+        log.info("CI environment detected, skipping interactive prompts for production configuration.");
     }
     
     // Save .env.production completely

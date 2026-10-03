@@ -1,6 +1,6 @@
 import { getEnv } from "../lib/env";
 import { createZip } from "../lib/zip";
-import { exportDb, searchReplaceSQL } from "../lib/db";
+import { exportDb, searchReplaceSQL, hardenAdminCredentialsSQL } from "../lib/db";
 import { log } from "../lib/logger";
 import { rmSync, mkdirSync, cpSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
@@ -119,6 +119,7 @@ add_action( 'phpmailer_init', function( $phpmailer ) {
         const sqlFile = join(stagingWpDir, "zerosugar_import.sql");
         await exportDb(env, sqlFile);
         searchReplaceSQL(sqlFile, env.LOCAL_URL, env.PROD_URL);
+        hardenAdminCredentialsSQL(sqlFile, env);
     } else {
         log.info("Skipping database export...");
     }

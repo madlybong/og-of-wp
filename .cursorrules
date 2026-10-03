@@ -1,0 +1,11 @@
+# OG of WP - AI System Context
+
+## Architecture
+- This repository contains a unified ecosystem: A WordPress Plugin (`og-of-wp.php`) and a standalone Bun-compiled CLI tool (`cli/cli.ts`).
+- **DO NOT** use Node.js or `npm`. Always use `bun` for CLI operations.
+- The single source of truth for versioning is synchronized via `bun run scripts/sync-version.ts <version>`.
+
+## Local Testing Environment
+- The testing environment lives inside the `wordpress/` directory.
+- **DO NOT** create symlinks. We use a "Proxy Loader" pattern. The file `wordpress/wp-content/plugins/og-of-wp.php` dynamically `require_once`s the root plugin file.
+- **NEVER** modify files inside the `wordpress/` directory except the proxy loader. All plugin development must happen in the root repository.

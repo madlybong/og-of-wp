@@ -3,7 +3,7 @@
  * Plugin Name: OG of WP
  * Plugin URI:  https://astrake.com/baddies/og-of-wp
  * Description: A complete, lightweight, and modular multi-purpose plugin for WordPress.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Astrake
  * Author URI:  https://astrake.com/baddies/og-of-wp
  * License:     GPLv2 or later
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'OG_WP_VERSION', '1.0.0' );
+define( 'OG_WP_VERSION', '1.0.1' );
 define( 'OG_WP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'OG_WP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -35,8 +35,29 @@ function og_wp_activate() {
 		PRIMARY KEY  (id)
 	) $charset_collate;";
 
+	$email_table = $wpdb->prefix . 'og_wp_email_logs';
+	$email_sql = "CREATE TABLE IF NOT EXISTS $email_table (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		created_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+		to_email text NOT NULL,
+		subject text NOT NULL,
+		message longtext NOT NULL,
+		headers text,
+		attachments text,
+		status varchar(50) NOT NULL DEFAULT 'queued',
+		provider varchar(100) NOT NULL DEFAULT 'default',
+		error_details text,
+		retry_count int(11) NOT NULL DEFAULT 0,
+		opened_at datetime DEFAULT NULL,
+		open_count int(11) NOT NULL DEFAULT 0,
+		PRIMARY KEY  (id),
+		KEY status (status),
+		KEY created_at (created_at)
+	) $charset_collate;";
+
 	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 	dbDelta( $sql );
+	dbDelta( $email_sql );
 
 	// Migration: copy old options if they exist and new options don't
 	$old_options = get_option( 'lumora_wp_secure_options' );

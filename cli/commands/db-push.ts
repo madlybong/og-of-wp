@@ -1,5 +1,5 @@
 import { getEnv } from "../lib/env";
-import { exportDb, searchReplaceSQL } from "../lib/db";
+import { exportDb, searchReplaceSQL, hardenAdminCredentialsSQL } from "../lib/db";
 import { log } from "../lib/logger";
 
 export default async function () {
@@ -13,6 +13,7 @@ export default async function () {
     
     log.info("Rewriting URLs for production...");
     searchReplaceSQL(outputFile, env.LOCAL_URL, env.PROD_URL);
+    hardenAdminCredentialsSQL(outputFile, env);
     
     log.success(`SQL ready: ${outputFile}`);
     log.info(`Import this file via cPanel > phpMyAdmin into database: ${env.PROD_DB_NAME}`);

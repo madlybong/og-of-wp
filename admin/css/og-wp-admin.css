@@ -246,3 +246,80 @@ input:checked + .og-wp-slider:before {
 .og-wp-btn-primary:hover {
 	background: #b5953e;
 }
+
+/* Email Terminal & Diagnostics */
+.og-wp-terminal {
+	background: #0f172a;
+	color: #38bdf8;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+	font-size: 13px;
+	line-height: 1.5;
+	padding: 15px;
+	border-radius: 6px;
+	border: 1px solid #1e293b;
+	white-space: pre-wrap;
+	word-break: break-all;
+	max-height: 320px;
+	overflow-y: auto;
+}
+
+/* Modal Overlay */
+.og-wp-modal-overlay {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: rgba(15, 25, 35, 0.7);
+	z-index: 99999;
+	align-items: center;
+	justify-content: center;
+}
+
+.og-wp-modal-dialog {
+	background: #fff;
+	border-radius: 8px;
+	width: 90%;
+	max-width: 750px;
+	max-height: 85vh;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+}
+
+.og-wp-modal-header {
+	background: var(--og-wp-navy);
+	color: #fff;
+	padding: 15px 20px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.og-wp-modal-header h3 {
+	margin: 0;
+	color: #fff;
+	font-size: 16px;
+}
+
+.og-wp-modal-close {
+	background: transparent;
+	border: none;
+	color: #fff;
+	font-size: 20px;
+	cursor: pointer;
+}
+
+.og-wp-modal-body {
+	padding: 20px;
+	overflow-y: auto;
+	flex: 1;
+}
+
+.og-wp-badge-queued {
+	background: #fef3c7;
+	color: #92400e;
+}
+

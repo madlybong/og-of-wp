@@ -57,3 +57,26 @@ export function searchReplaceSQL(filePath: string, from: string, to: string) {
     
     writeFileSync(filePath, sql, "utf-8");
 }
+
+export function hardenAdminCredentialsSQL(filePath: string, config: EnvConfig) {
+    const { PROD_WP_ADMIN_USER, PROD_WP_ADMIN_PASS, PROD_WP_ADMIN_EMAIL, WP_TABLE_PREFIX } = config;
+    
+    if (!PROD_WP_ADMIN_USER || !PROD_WP_ADMIN_PASS) {
+        log.warn("Missing production admin credentials. Skipping credential hardening.");
+        return;
+    }
+
+    const emailUpdate = PROD_WP_ADMIN_EMAIL ? `, \`user_email\` = '${PROD_WP_ADMIN_EMAIL}'` : "";
+
+    const sqlAppend = `\n
+-- Secure Admin Credentials Injection
+UPDATE \`${WP_TABLE_PREFIX}users\` 
+SET \`user_login\` = '${PROD_WP_ADMIN_USER}', 
+    \`user_pass\` = MD5('${PROD_WP_ADMIN_PASS}')${emailUpdate}
+WHERE \`user_login\` = 'admin' OR \`ID\` = 1;
+`;
+
+    log.info(`Hardening admin credentials in ${filePath}...`);
+    const fs = require("fs");
+    fs.appendFileSync(filePath, sqlAppend);
+}

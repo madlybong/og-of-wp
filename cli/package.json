@@ -1,6 +1,6 @@
 {
   "name": "zero-sugar-deploy-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "scripts": {
     "deploy": "bun run cli.ts"
   },
