@@ -10,6 +10,7 @@ class OG_WP {
 	protected $version;
 
 	public function __construct() {
+		add_action( 'admin_init', array( $this, 'upgrade_database' ) );
 		$this->plugin_name = 'og-of-wp';
 		$this->version = OG_WP_VERSION;
 
@@ -28,6 +29,29 @@ class OG_WP {
 
 	private function set_locale() {
 		add_action( 'plugins_loaded', array( $this, 'load_plugin_textdomain' ) );
+	}
+
+		public function upgrade_database() {
+		$version = get_option('og_wp_db_version', '0.0.0');
+		if (version_compare($version, OG_WP_VERSION, '<')) {
+			$options = get_option('og_wp_options', []);
+			
+			require_once OG_WP_PLUGIN_DIR . 'includes/modules/class-og-wp-audit.php';
+			$audit = new OG_WP_Audit($options);
+			$audit->create_table();
+
+			require_once OG_WP_PLUGIN_DIR . 'includes/modules/class-og-wp-email.php';
+			$email = new OG_WP_Email($options);
+			$email->ensure_table_exists();
+
+			if (file_exists(OG_WP_PLUGIN_DIR . 'includes/modules/class-og-wp-cf7.php')) {
+				require_once OG_WP_PLUGIN_DIR . 'includes/modules/class-og-wp-cf7.php';
+				$cf7 = new OG_WP_CF7($options);
+				$cf7->ensure_tables_exist();
+			}
+
+			update_option('og_wp_db_version', OG_WP_VERSION);
+		}
 	}
 
 	public function setup_cron() {
@@ -71,6 +95,7 @@ class OG_WP {
 			'media_cleaner' => 'class-og-wp-media-cleaner.php',
 			'email'     => 'class-og-wp-email.php',
 			'branding'  => 'class-og-wp-branding.php',
+			'cf7'       => 'class-og-wp-cf7.php',
 		];
 
 		foreach ( $modules as $key => $file ) {
@@ -94,13 +119,26 @@ class OG_WP {
 		require_once OG_WP_PLUGIN_DIR . 'includes/modules/class-og-wp-branding.php';
 		new OG_WP_Branding( $options );
 
-		// In admin area, ensure Email module is loaded for test sends, log viewer, and DNS checker
-		if ( is_admin() && empty( $options['enable_module_email'] ) ) {
-			$email_file = OG_WP_PLUGIN_DIR . 'includes/modules/class-og-wp-email.php';
-			if ( file_exists( $email_file ) ) {
-				require_once $email_file;
-				if ( class_exists( 'OG_WP_Email' ) ) {
-					new OG_WP_Email( $options );
+		// In admin area, ensure utility and email modules are loaded for settings rendering and AJAX tools
+		if ( is_admin() ) {
+			$admin_modules = [
+				'email'         => 'class-og-wp-email.php',
+				'scanner'       => 'class-og-wp-scanner.php',
+				'cf7'           => 'class-og-wp-cf7.php',
+				'duplicator'    => 'class-og-wp-duplicator.php',
+				'porter'        => 'class-og-wp-porter.php',
+				'media_cleaner' => 'class-og-wp-media-cleaner.php',
+			];
+			foreach ( $admin_modules as $mod_key => $mod_file ) {
+				if ( empty( $options[ "enable_module_{$mod_key}" ] ) ) {
+					$fpath = OG_WP_PLUGIN_DIR . 'includes/modules/' . $mod_file;
+					if ( file_exists( $fpath ) ) {
+						require_once $fpath;
+						$cname = 'OG_WP_' . str_replace( ' ', '_', ucwords( str_replace( '_', ' ', $mod_key ) ) );
+						if ( class_exists( $cname ) ) {
+							new $cname( $options );
+						}
+					}
 				}
 			}
 		}
@@ -110,3 +148,6 @@ class OG_WP {
 		// Hooks are registered in constructor/modules
 	}
 }
+
+
+

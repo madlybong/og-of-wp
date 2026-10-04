@@ -61,10 +61,7 @@ class OG_WP_Email {
 	}
 
 	public function ensure_table_exists() {
-		$transient_key = 'og_wp_email_table_check_v2';
-		if ( get_transient( $transient_key ) ) {
-			return;
-		}
+		
 
 		global $wpdb;
 		$charset_collate = $wpdb->get_charset_collate();
@@ -76,6 +73,8 @@ class OG_WP_Email {
 			subject text NOT NULL,
 			message longtext NOT NULL,
 			headers text,
+				source_plugin varchar(50) DEFAULT '',
+				source_ref varchar(100) DEFAULT '',
 			attachments text,
 			status varchar(50) NOT NULL DEFAULT 'queued',
 			provider varchar(100) NOT NULL DEFAULT 'default',
@@ -98,7 +97,7 @@ class OG_WP_Email {
 			$wpdb->query( "ALTER TABLE {$this->table_name} ADD COLUMN open_count int(11) NOT NULL DEFAULT 0" );
 		}
 
-		set_transient( $transient_key, true, WEEK_IN_SECONDS );
+		
 	}
 
 	public function filter_from_email( $original_email ) {
@@ -190,6 +189,7 @@ class OG_WP_Email {
 	}
 
 	public function handle_pre_wp_mail( $null, $atts ) {
+		$atts = apply_filters('og_wp_pre_mail_args', $atts);
 		if ( empty( $this->options['enable_module_email'] ) && empty( $GLOBALS['og_wp_is_test_email'] ) ) {
 			return null;
 		}
@@ -459,6 +459,7 @@ class OG_WP_Email {
 	}
 
 	public function ajax_flush_email_queue() {
+		check_ajax_referer('og_wp_admin_ajax', 'og_wp_nonce');
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( 'Unauthorized' );
 		}
@@ -1281,6 +1282,7 @@ class OG_WP_Email {
 	// -------------------------------------------------------------
 
 	public function ajax_send_test_email() {
+		check_ajax_referer('og_wp_admin_ajax', 'og_wp_nonce');
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( 'Unauthorized' );
 		}
@@ -1328,6 +1330,7 @@ class OG_WP_Email {
 	}
 
 	public function ajax_check_domain_dns() {
+		check_ajax_referer('og_wp_admin_ajax', 'og_wp_nonce');
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( 'Unauthorized' );
 		}
@@ -1409,6 +1412,7 @@ class OG_WP_Email {
 	}
 
 	public function ajax_resend_email() {
+		check_ajax_referer('og_wp_admin_ajax', 'og_wp_nonce');
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( 'Unauthorized' );
 		}
@@ -1443,6 +1447,7 @@ class OG_WP_Email {
 	}
 
 	public function ajax_view_email() {
+		check_ajax_referer('og_wp_admin_ajax', 'og_wp_nonce');
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( 'Unauthorized' );
 		}
@@ -1484,6 +1489,7 @@ class OG_WP_Email {
 	}
 
 	public function ajax_clear_email_logs() {
+		check_ajax_referer('og_wp_admin_ajax', 'og_wp_nonce');
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( 'Unauthorized' );
 		}
@@ -1494,6 +1500,7 @@ class OG_WP_Email {
 	}
 
 	public function ajax_bulk_delete_email_logs() {
+		check_ajax_referer('og_wp_admin_ajax', 'og_wp_nonce');
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( 'Unauthorized' );
 		}
@@ -1513,6 +1520,7 @@ class OG_WP_Email {
 	}
 
 	public function ajax_bulk_resend_email_logs() {
+		check_ajax_referer('og_wp_admin_ajax', 'og_wp_nonce');
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( 'Unauthorized' );
 		}
@@ -1708,3 +1716,12 @@ class OG_WP_Email {
 		return new WP_REST_Response( array( 'received' => true ), 200 );
 	}
 }
+
+
+
+
+
+
+
+
+

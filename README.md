@@ -127,16 +127,17 @@ bun start <command>
 ### Environment Configuration
 The CLI reads configuration automatically from your environment. You can create a `.env` file in the project directory:
 ```env
-LOCAL_WP_PATH=c:/xampp/htdocs/zero-sugar/wordpress
-LOCAL_DB_NAME=zero_sugar_db
+PROJECT_SLUG=og-of-wp
+LOCAL_WP_PATH=../wordpress
+LOCAL_DB_NAME=og_of_wp_db
 LOCAL_DB_USER=root
 LOCAL_DB_PASS=
-LOCAL_SITE_URL=http://localhost/zero-sugar/wordpress
+LOCAL_URL=http://localhost/og-of-wp/wordpress
 
 PROD_DB_NAME=cpanel_wpdb
 PROD_DB_USER=cpanel_user
 PROD_DB_PASS=secret
-PROD_SITE_URL=https://zerosugar.in
+PROD_URL=https://example.com
 ```
 
 > **Interactive Fallback:** If any variable is missing or you wish to override it, the CLI will prompt you in the terminal with dynamic defaults pre-populated!

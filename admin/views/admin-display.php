@@ -1,1226 +1,1210 @@
-<div class="wrap og-wp-wrap">
-	<h1 style="display:none;">OG of WP</h1>
-	
-	<?php settings_errors(); ?>
+<?php
+/**
+ * OG of WP - Standardized Vue 3 Single-Page Settings Application
+ */
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 
-	<?php
-	$options = get_option( 'og_wp_options', array() );
-	$modules = [
-		'auth'      => 'Authentication & Login Hardening',
-		'waf'       => 'Firewall (WAF)',
-		'files'     => 'File & Filesystem Security',
-		'scanner'   => 'Malware & Vulnerability Scanner',
-		'spam'      => 'Spam Protection',
-		'headers'   => 'HTTP Security Headers',
-		'audit'     => 'Activity Log & Audit Trail',
-		'ssl'       => 'SSL / HTTPS Enforcement',
-		'db'        => 'Database Security',
-		'user'      => 'User & Role Security',
-		'hardening' => 'WordPress Hardening',
-	];
+$options = get_option( 'og_wp_options', array() );
 
-	$enabled_count = 0;
-	foreach ( $modules as $key => $label ) {
-		if ( ! empty( $options["enable_module_{$key}"] ) ) {
-			$enabled_count++;
-		}
+$security_modules = [
+	'auth'      => [ 'title' => 'Authentication Hardening', 'desc' => 'Limit login attempts, disable XML-RPC, and enforce strong password policies.' ],
+	'waf'       => [ 'title' => 'Web Application Firewall', 'desc' => 'Inspect requests for SQL injection, bad bots, and manage IP allow/block lists.' ],
+	'files'     => [ 'title' => 'Filesystem Security', 'desc' => 'Disable file editor, block execution in upload folders, and restrict permissions.' ],
+	'scanner'   => [ 'title' => 'Malware & File Scanner', 'desc' => 'Compare core checksums and scan plugin/theme files for malicious signatures.' ],
+	'spam'      => [ 'title' => 'Spam & Form Protection', 'desc' => 'Block automated comment spam, disposable emails, and honeypot form abuse.' ],
+	'headers'   => [ 'title' => 'HTTP Security Headers', 'desc' => 'Configure HSTS, Content-Security-Policy, X-Frame-Options, and Referrer-Policy.' ],
+	'audit'     => [ 'title' => 'Audit & Activity Trail', 'desc' => 'Record administrative logins, failed attempts, and sensitive changes in local DB.' ],
+	'ssl'       => [ 'title' => 'SSL / HTTPS Enforcement', 'desc' => 'Enforce site-wide SSL redirects, secure cookies, and mixed-content remediation.' ],
+	'db'        => [ 'title' => 'Database Security', 'desc' => 'Audit table prefix vulnerabilities, optimize tables, and schedule repair tasks.' ],
+	'user'      => [ 'title' => 'User & Role Security', 'desc' => 'Automate idle session logouts, restrict default usernames, and role governance.' ],
+	'hardening' => [ 'title' => 'WordPress Hardening', 'desc' => 'Hide WP version fingerprints, disable pingbacks, and protect wp-config.php.' ],
+];
+
+$utility_modules = [
+	'duplicator'    => [ 'title' => 'Post/Page Duplicator', 'desc' => 'One-click cloning of posts, pages, and custom post types with all metadata.' ],
+	'porter'        => [ 'title' => 'Content Porter (JSON)', 'desc' => 'Export and import structured content, taxonomies, and terms across sites.' ],
+	'media_cleaner' => [ 'title' => 'Media Gallery Cleaner', 'desc' => 'Identify orphaned, unattached, and unused image assets in your media library.' ],
+	'cf7'           => [ 'title' => 'Contact Form 7 Integration', 'desc' => 'Native submission handler with zero-loss attachment queueing and local DB capture.' ],
+];
+
+// Pre-render module settings into buffers
+$module_settings_html = [];
+foreach ( array_merge( $security_modules, $utility_modules ) as $key => $info ) {
+	ob_start();
+	do_action( 'og_wp_module_settings_' . $key, $options );
+	$module_settings_html[ $key ] = ob_get_clean();
+}
+
+ob_start();
+do_action( 'og_wp_module_settings_email', $options );
+$email_settings_html = ob_get_clean();
+
+ob_start();
+do_action( 'og_wp_module_settings_branding', $options );
+$branding_settings_html = ob_get_clean();
+
+// Count enabled modules
+$enabled_security_count = 0;
+foreach ( $security_modules as $key => $info ) {
+	if ( ! empty( $options["enable_module_{$key}"] ) ) {
+		$enabled_security_count++;
 	}
-	$score = round( ( $enabled_count / count( $modules ) ) * 100 );
-	$score_color = $score < 50 ? 'var(--og-wp-red)' : ( $score < 80 ? '#f0b849' : 'var(--og-wp-green)' );
-	$stroke_dasharray = ( $score / 100 ) * 283; // 283 is approx circumference of r=45
+}
 
-	$threats_blocked = '--';
-	if ( ! empty( $options['enable_module_audit'] ) ) {
-		global $wpdb;
-		$table_name = $wpdb->prefix . 'og_wp_audit_log';
-		if ( $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name ) {
-			$threats_blocked = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $table_name WHERE action = %s AND time > DATE_SUB(NOW(), INTERVAL 24 HOUR)", 'waf_block' ) );
+// Threats blocked in 24h
+$threats_blocked = 0;
+global $wpdb;
+$audit_table = $wpdb->prefix . 'og_wp_audit_log';
+if ( $wpdb->get_var( "SHOW TABLES LIKE '$audit_table'" ) === $audit_table ) {
+	$threats_blocked = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $audit_table WHERE action = %s AND time > DATE_SUB(NOW(), INTERVAL 24 HOUR)", 'waf_block' ) );
+}
+
+// Email stats
+$email_table = $wpdb->prefix . 'og_wp_email_logs';
+$email_stats = [ 'sent' => 0, 'failed' => 0, 'queued' => 0 ];
+if ( $wpdb->get_var( "SHOW TABLES LIKE '$email_table'" ) === $email_table ) {
+	$email_stats['sent']   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $email_table WHERE status = 'sent'" );
+	$email_stats['failed'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $email_table WHERE status = 'failed'" );
+	$email_stats['queued'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $email_table WHERE status = 'queued'" );
+}
+
+// Email deliverability score calculation
+$score_items = [];
+$from_email_cfg = $options['email_from_email'] ?? get_option( 'admin_email' );
+$score_domain = '';
+if ( strpos( $from_email_cfg, '@' ) !== false ) {
+	$score_domain = substr( strrchr( $from_email_cfg, '@' ), 1 );
+}
+$d_score = 0;
+$has_spf = false; $has_dmarc = false; $has_mx = false;
+$is_freemail = in_array( strtolower( $score_domain ), ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com'], true );
+
+if ( ! empty( $score_domain ) && function_exists( 'dns_get_record' ) ) {
+	$dns_cached = get_transient( 'og_wp_dns_score_' . md5( $score_domain ) );
+	if ( false === $dns_cached ) {
+		$txts = @dns_get_record( $score_domain, DNS_TXT ) ?: [];
+		$dmarc_txts = @dns_get_record( '_dmarc.' . $score_domain, DNS_TXT ) ?: [];
+		$mxs = @dns_get_record( $score_domain, DNS_MX ) ?: [];
+		$spf_found = false;
+		foreach ( $txts as $t ) {
+			$e = $t['txt'] ?? ( $t['entries'][0] ?? '' );
+			if ( strpos( $e, 'v=spf1' ) === 0 ) { $spf_found = true; break; }
 		}
+		$dmarc_found = false;
+		foreach ( $dmarc_txts as $t ) {
+			$e = $t['txt'] ?? ( $t['entries'][0] ?? '' );
+			if ( strpos( $e, 'v=DMARC1' ) === 0 ) { $dmarc_found = true; break; }
+		}
+		$dns_cached = [ 'spf' => $spf_found, 'dmarc' => $dmarc_found, 'mx' => ! empty( $mxs ) ];
+		set_transient( 'og_wp_dns_score_' . md5( $score_domain ), $dns_cached, 6 * HOUR_IN_SECONDS );
 	}
-	?>
+	$has_spf = ! empty( $dns_cached['spf'] );
+	$has_dmarc = ! empty( $dns_cached['dmarc'] );
+	$has_mx = ! empty( $dns_cached['mx'] );
+}
 
-	<div class="og-wp-nav-tabs">
-		<a href="#dashboard" class="og-wp-nav-tab active" onclick="switchTab(event, 'dashboard')">Dashboard</a>
-		<a href="#modules" class="og-wp-nav-tab" onclick="switchTab(event, 'modules')">Security</a>
-		<a href="#utilities" class="og-wp-nav-tab" onclick="switchTab(event, 'utilities')">Utilities</a>
-		<a href="#email" class="og-wp-nav-tab" onclick="switchTab(event, 'email')">Email & Deliverability</a>
-		<a href="#branding" class="og-wp-nav-tab" onclick="switchTab(event, 'branding')">Branding</a>
-		<a href="#logs" class="og-wp-nav-tab" onclick="switchTab(event, 'logs')">Audit Log</a>
-	</div>
+if ( $has_spf ) { $d_score += 25; $score_items[] = [ 'label' => 'SPF Record (v=spf1)', 'status' => 'pass', 'desc' => 'Valid SPF authentication record detected.' ]; }
+else { $score_items[] = [ 'label' => 'SPF Record (v=spf1)', 'status' => 'fail', 'desc' => 'Missing SPF record on sending domain.' ]; }
 
-	<form method="post" action="options.php">
-		<?php settings_fields( 'og_wp_option_group' ); ?>
+if ( $has_dmarc ) { $d_score += 25; $score_items[] = [ 'label' => 'DMARC Policy (v=DMARC1)', 'status' => 'pass', 'desc' => 'Valid DMARC domain policy active.' ]; }
+else { $score_items[] = [ 'label' => 'DMARC Policy (v=DMARC1)', 'status' => 'fail', 'desc' => 'Missing DMARC policy at _dmarc.' . ( $score_domain ?: 'domain' ) ]; }
+
+if ( $has_mx ) { $d_score += 15; $score_items[] = [ 'label' => 'MX Mail Exchange', 'status' => 'pass', 'desc' => 'Valid incoming mail exchangers configured.' ]; }
+else { $score_items[] = [ 'label' => 'MX Mail Exchange', 'status' => 'warn', 'desc' => 'No MX mail records found.' ]; }
+
+if ( ! $is_freemail && ! empty( $score_domain ) ) { $d_score += 15; $score_items[] = [ 'label' => 'Domain Reputation', 'status' => 'pass', 'desc' => 'Using custom domain (' . esc_html( $score_domain ) . ').' ]; }
+else { $score_items[] = [ 'label' => 'Domain Reputation', 'status' => 'fail', 'desc' => 'Free webmail addresses violate DMARC when sent from servers.' ]; }
+
+if ( ! empty( $options['email_async_queue'] ) ) { $d_score += 10; $score_items[] = [ 'label' => 'Async Email Queue', 'status' => 'pass', 'desc' => 'Zero-blocking background worker enabled.' ]; }
+else { $score_items[] = [ 'label' => 'Async Email Queue', 'status' => 'warn', 'desc' => 'Synchronous SMTP connections block web requests.' ]; }
+
+$fallback_prov = $options['email_fallback_provider'] ?? 'none';
+if ( ! empty( $fallback_prov ) && $fallback_prov !== 'none' ) { $d_score += 10; $score_items[] = [ 'label' => 'High-Availability Failover', 'status' => 'pass', 'desc' => 'Secondary provider active (' . strtoupper( $fallback_prov ) . ').' ]; }
+else { $score_items[] = [ 'label' => 'High-Availability Failover', 'status' => 'warn', 'desc' => 'No automatic failover provider configured.' ]; }
+
+// Email logs
+$email_logs = [];
+if ( $wpdb->get_var( "SHOW TABLES LIKE '$email_table'" ) === $email_table ) {
+	$email_logs = $wpdb->get_results( "SELECT id, created_at, to_email, subject, status, provider, retry_count, open_count, opened_at, error_details FROM $email_table ORDER BY created_at DESC LIMIT 20", ARRAY_A ) ?: [];
+}
+
+// Audit logs
+$audit_logs = [];
+if ( $wpdb->get_var( "SHOW TABLES LIKE '$audit_table'" ) === $audit_table ) {
+	$raw_audit = $wpdb->get_results( "SELECT * FROM $audit_table ORDER BY time DESC LIMIT 25" ) ?: [];
+	foreach ( $raw_audit as $log ) {
+		$user_display = 'Guest / System';
+		if ( $log->user_id > 0 ) {
+			$u = get_userdata( $log->user_id );
+			$user_display = $u ? $u->user_login : 'ID: ' . $log->user_id;
+		}
+		$audit_logs[] = [
+			'id'      => $log->id,
+			'time'    => $log->time,
+			'ip'      => $log->ip_address,
+			'user'    => $user_display,
+			'action'  => $log->action,
+			'details' => $log->details,
+		];
+	}
+}
+
+// Export CSV URLs
+$export_logs_url = admin_url( 'admin-post.php?action=og_wp_export_logs' );
+$export_email_logs_url = admin_url( 'admin-post.php?action=og_wp_export_email_logs' );
+$provider_names = [
+	'smtp'     => 'SMTP Server',
+	'ses'      => 'Amazon SES v2',
+	'resend'   => 'Resend API',
+	'sendgrid' => 'SendGrid API',
+	'mailgun'  => 'Mailgun API',
+	'postmark' => 'Postmark API',
+	'brevo'    => 'Brevo API',
+];
+$active_provider = $provider_names[ $options['email_provider'] ?? 'smtp' ] ?? 'SMTP Server';
+?>
+
+<div id="og-wp-app" class="antialiased font-sans text-slate-800" v-cloak>
+	<!-- Floating Toast Notification -->
+	<transition name="fade">
+		<div v-if="toast.visible" 
+			:class="toast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-slate-900 text-white'"
+			class="fixed bottom-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-xl text-sm font-medium border border-slate-700">
+			<span>{{ toast.message }}</span>
+			<button @click="toast.visible = false" class="text-slate-400 hover:text-white">&times;</button>
+		</div>
+	</transition>
+
+	<!-- Main Shell Container (Sidebar + Content) -->
+	<div class="flex flex-col lg:flex-row gap-5 items-start">
 		
-		<div id="tab-dashboard" class="og-wp-tab-content active">
-			<div class="og-wp-dashboard-grid">
-				<div class="og-wp-stat-card" style="display:flex; flex-direction:column; align-items:center;">
-					<h3>Security Score</h3>
-					<div style="position:relative; width:120px; height:120px; margin: 10px 0;">
-						<svg width="120" height="120" viewBox="0 0 100 100">
-							<circle cx="50" cy="50" r="45" fill="none" stroke="#e2e8f0" stroke-width="10" />
-							<circle cx="50" cy="50" r="45" fill="none" stroke="<?php echo $score_color; ?>" stroke-width="10" stroke-dasharray="<?php echo $stroke_dasharray; ?>, 283" stroke-linecap="round" transform="rotate(-90 50 50)" style="transition: stroke-dasharray 1s ease-out;" />
-						</svg>
-						<div style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:bold; color:var(--og-wp-navy);">
-							<?php echo $score; ?>
-						</div>
-					</div>
-					<p>out of 100</p>
-				</div>
-				<div class="og-wp-stat-card">
-					<h3>Active Modules</h3>
-					<div class="og-wp-stat-value" style="margin: 30px 0;">
-						<?php echo $enabled_count; ?>
-					</div>
-					<p>out of <?php echo count( $modules ); ?></p>
-				</div>
-				<div class="og-wp-stat-card">
-					<h3>Threats Blocked</h3>
-					<div class="og-wp-stat-value" id="og_wp_threats_blocked" style="margin: 30px 0;">
-						<?php echo esc_html( $threats_blocked ); ?>
-					</div>
-					<p>in last 24 hours</p>
-				</div>
-			</div>
-			<div style="background: var(--og-wp-card); border: 1px solid var(--og-wp-border); border-radius: 6px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-				<h3 style="margin-top:0;">Quick Actions</h3>
-				<?php if ( $score < 100 ) : ?>
-					<div style="background: #fdf2f2; color: var(--og-wp-red); padding: 10px 15px; border-radius: 4px; margin-bottom: 15px; font-size: 14px;">
-						<strong>Attention:</strong> Some security modules are disabled. To achieve maximum security, enable all modules in the Modules tab.
-					</div>
-				<?php endif; ?>
-				<button type="button" class="og-wp-btn-primary" id="og-wp-run-scan-btn" onclick="runMalwareScan()">Run Malware Scan Now</button>
-				<span id="og-wp-scan-result" style="margin-left: 15px; font-weight: 600;"></span>
-			</div>
-		</div>
-
-		<div id="tab-modules" class="og-wp-tab-content">
-			<h2 style="margin-top:0;">Security Modules</h2>
-			<p>Toggle modules to enable them. Expand the panel to configure advanced settings.</p>
-			
-			<div style="max-width: 800px; margin-top: 20px;">
-				<?php 
-				foreach ($modules as $key => $label) :
-					$field_id = "enable_module_{$key}";
-					$checked = isset($options[$field_id]) && $options[$field_id] == '1' ? 'checked' : '';
-					$status_class = $checked ? 'status-active' : 'status-disabled';
-					$status_text = $checked ? 'Active' : 'Disabled';
-				?>
-				<div class="og-wp-module-card">
-					<div class="og-wp-module-header" onclick="toggleConfig(event, '<?php echo esc_attr($key); ?>')">
-						<label class="og-wp-switch" onclick="event.stopPropagation()">
-							<input type="checkbox" name="og_wp_options[<?php echo esc_attr($field_id); ?>]" value="1" <?php echo $checked; ?> onchange="updateStatus(this, '<?php echo esc_attr($key); ?>')" />
-							<span class="og-wp-slider"></span>
-						</label>
-						<h3 class="og-wp-module-title"><?php echo esc_html($label); ?></h3>
-						<span class="og-wp-module-status <?php echo $status_class; ?>" id="status-<?php echo esc_attr($key); ?>"><?php echo $status_text; ?></span>
-					</div>
-					
-					<div class="og-wp-module-config" id="config-<?php echo esc_attr($key); ?>" <?php if($checked) echo 'style="display:block;"'; ?>>
-						<?php do_action('og_wp_module_settings_' . $key, $options); ?>
-						<?php if ( ! has_action('og_wp_module_settings_' . $key) ) : ?>
-							<p><em>No advanced configuration available for this module.</em></p>
-						<?php endif; ?>
-					</div>
-				</div>
-				<?php endforeach; ?>
-			</div>
-			
-			<div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--og-wp-border);">
-				<button type="submit" class="og-wp-btn-primary">Save Changes</button>
-			</div>
-		</div>
-	<div id="tab-utilities" class="og-wp-tab-content">
-		<h2 style="margin-top:0;">Utilities</h2>
-		<p>Enable and configure multipurpose utility modules.</p>
-		
-		<div style="max-width: 800px; margin-top: 20px;">
-			<?php 
-			$utility_modules = [
-				'duplicator' => 'Post/Page Duplicator',
-				'porter' => 'Content Porter (Export/Import)',
-				'media_cleaner' => 'Media Gallery Cleaner',
-			];
-			foreach ($utility_modules as $key => $label) :
-				$field_id = "enable_module_{$key}";
-				$checked = isset($options[$field_id]) && $options[$field_id] == '1' ? 'checked' : '';
-				$status_class = $checked ? 'status-active' : 'status-disabled';
-				$status_text = $checked ? 'Active' : 'Disabled';
-			?>
-				<div class="og-wp-module-card">
-					<div class="og-wp-module-header" onclick="toggleConfig(event, '<?php echo esc_attr($key); ?>')">
-						<label class="og-wp-switch" onclick="event.stopPropagation()">
-							<input type="checkbox" name="og_wp_options[<?php echo esc_attr($field_id); ?>]" value="1" <?php echo $checked; ?> onchange="updateStatus(this, '<?php echo esc_attr($key); ?>')" />
-							<span class="og-wp-slider"></span>
-						</label>
-						<h3 class="og-wp-module-title"><?php echo esc_html($label); ?></h3>
-						<span class="og-wp-module-status <?php echo $status_class; ?>" id="status-<?php echo esc_attr($key); ?>"><?php echo $status_text; ?></span>
-					</div>
-					
-					<div class="og-wp-module-config" id="config-<?php echo esc_attr($key); ?>" <?php if($checked) echo 'style="display:block;"'; ?>>
-						<?php do_action('og_wp_module_settings_' . $key, $options); ?>
-						<?php if ( ! has_action('og_wp_module_settings_' . $key) ) : ?>
-							<p><em>No advanced configuration available for this module.</em></p>
-						<?php endif; ?>
-					</div>
-				</div>
-			<?php endforeach; ?>
-			<div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--og-wp-border);">
-				<button type="submit" class="og-wp-btn-primary">Save Changes</button>
-			</div>
-		</div>
-	</div>
-
-	<div id="tab-email" class="og-wp-tab-content">
-		<?php
-		global $wpdb;
-		$email_table = $wpdb->prefix . 'og_wp_email_logs';
-		$total_sent = 0;
-		$total_failed = 0;
-		$total_queued = 0;
-		$raw_provider = $options['email_provider'] ?? 'smtp';
-		$provider_names = array(
-			'smtp'     => 'SMTP',
-			'ses'      => 'Amazon SES v2',
-			'resend'   => 'Resend API',
-			'sendgrid' => 'SendGrid API',
-			'mailgun'  => 'Mailgun API',
-			'postmark' => 'Postmark API',
-			'brevo'    => 'Brevo API',
-		);
-		$active_mailer = $provider_names[ $raw_provider ] ?? strtoupper( $raw_provider );
-
-		if ( $wpdb->get_var( "SHOW TABLES LIKE '$email_table'" ) === $email_table ) {
-			$total_sent   = $wpdb->get_var( "SELECT COUNT(*) FROM $email_table WHERE status = 'sent'" ) ?: 0;
-			$total_failed = $wpdb->get_var( "SELECT COUNT(*) FROM $email_table WHERE status = 'failed'" ) ?: 0;
-			$total_queued = $wpdb->get_var( "SELECT COUNT(*) FROM $email_table WHERE status = 'queued'" ) ?: 0;
-		}
-
-		$email_enabled = ! empty( $options['enable_module_email'] );
-		$email_status_class = $email_enabled ? 'status-active' : 'status-disabled';
-		$email_status_text  = $email_enabled ? 'Active' : 'Disabled';
-		?>
-		
-		<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; flex-wrap:wrap; gap:15px;">
-			<div>
-				<h2 style="margin:0 0 5px 0;">Email & Deliverability Suite</h2>
-				<p style="margin:0; color:#646970;">Manage multi-provider routing, zero-blocking async queues, live SMTP diagnostics, and DNS health.</p>
-			</div>
-			<div style="display:flex; align-items:center; gap:12px; background:#fff; padding:8px 15px; border-radius:6px; border:1px solid var(--og-wp-border);">
-				<span style="font-weight:600; font-size:14px; color:var(--og-wp-text);">Engine Status:</span>
-				<label class="og-wp-switch">
-					<input type="checkbox" name="og_wp_options[enable_module_email]" value="1" <?php checked( $email_enabled ); ?> onchange="updateStatus(this, 'email_top')" />
-					<span class="og-wp-slider"></span>
-				</label>
-				<span class="og-wp-module-status <?php echo $email_status_class; ?>" id="status-email_top"><?php echo $email_status_text; ?></span>
-			</div>
-		</div>
-
-		<!-- Email Metric Cards -->
-		<div class="og-wp-dashboard-grid" style="margin-bottom:25px;">
-			<div class="og-wp-stat-card">
-				<h3>Primary Engine</h3>
-				<div class="og-wp-stat-value" style="font-size:24px; margin:20px 0; color:var(--og-wp-gold);">
-					<?php echo esc_html( $active_mailer ); ?>
-				</div>
-				<p>Active Provider</p>
-			</div>
-			<div class="og-wp-stat-card">
-				<h3>Delivered Emails</h3>
-				<div class="og-wp-stat-value" style="color:var(--og-wp-green); font-size:32px; margin:15px 0;">
-					<?php echo number_format_i18n( $total_sent ); ?>
-				</div>
-				<p>Successfully Handed Off</p>
-			</div>
-			<div class="og-wp-stat-card">
-				<h3>Failed Deliveries</h3>
-				<div class="og-wp-stat-value" style="color:var(--og-wp-red); font-size:32px; margin:15px 0;">
-					<?php echo number_format_i18n( $total_failed ); ?>
-				</div>
-				<p>Connection/Auth Drops</p>
-			</div>
-			<div class="og-wp-stat-card">
-				<h3>Async Queue</h3>
-				<div class="og-wp-stat-value" style="color:var(--og-wp-navy); font-size:32px; margin:15px 0;">
-					<span id="og_wp_stat_queued_count"><?php echo number_format_i18n( $total_queued ); ?></span>
-				</div>
-				<div style="display:flex; justify-content:space-between; align-items:center;">
-					<p style="margin:0;">Pending Worker Dispatch</p>
-					<button type="button" class="button button-small" id="og_wp_flush_queue_btn" onclick="flushEmailQueue()" style="font-size:11px;">⚡ Flush Now</button>
-				</div>
-			</div>
-		</div>
-
-		<?php
-		// Calculate Deliverability Health Score (0 - 100)
-		$score = 0;
-		$score_items = array();
-
-		$from_email_cfg = $options['email_from_email'] ?? get_option( 'admin_email' );
-		$score_domain = '';
-		if ( strpos( $from_email_cfg, '@' ) !== false ) {
-			$score_domain = substr( strrchr( $from_email_cfg, '@' ), 1 );
-		}
-
-		$has_spf = false;
-		$has_dmarc = false;
-		$has_mx = false;
-		$is_freemail = false;
-
-		if ( ! empty( $score_domain ) ) {
-			$free_domains = array( 'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com' );
-			$is_freemail = in_array( strtolower( $score_domain ), $free_domains, true );
-
-			if ( function_exists( 'dns_get_record' ) ) {
-				$dns_cache_key = 'og_wp_dns_score_' . md5( $score_domain );
-				$dns_cached = get_transient( $dns_cache_key );
-				if ( false === $dns_cached ) {
-					$txts = @dns_get_record( $score_domain, DNS_TXT ) ?: array();
-					$dmarc_txts = @dns_get_record( '_dmarc.' . $score_domain, DNS_TXT ) ?: array();
-					$mxs = @dns_get_record( $score_domain, DNS_MX ) ?: array();
-
-					$spf_found = false;
-					foreach ( $txts as $t ) {
-						$e = $t['txt'] ?? ( $t['entries'][0] ?? '' );
-						if ( strpos( $e, 'v=spf1' ) === 0 ) {
-							$spf_found = true;
-							break;
-						}
-					}
-
-					$dmarc_found = false;
-					foreach ( $dmarc_txts as $t ) {
-						$e = $t['txt'] ?? ( $t['entries'][0] ?? '' );
-						if ( strpos( $e, 'v=DMARC1' ) === 0 ) {
-							$dmarc_found = true;
-							break;
-						}
-					}
-
-					$dns_cached = array(
-						'spf'   => $spf_found,
-						'dmarc' => $dmarc_found,
-						'mx'    => ! empty( $mxs ),
-					);
-					set_transient( $dns_cache_key, $dns_cached, 6 * HOUR_IN_SECONDS );
-				}
-
-				$has_spf   = ! empty( $dns_cached['spf'] );
-				$has_dmarc = ! empty( $dns_cached['dmarc'] );
-				$has_mx    = ! empty( $dns_cached['mx'] );
-			}
-		}
-
-		if ( $has_spf ) {
-			$score += 25;
-			$score_items[] = array( 'label' => 'SPF Record (v=spf1)', 'status' => 'pass', 'desc' => 'Valid SPF record detected.' );
-		} else {
-			$score_items[] = array( 'label' => 'SPF Record (v=spf1)', 'status' => 'fail', 'desc' => 'Missing SPF record on sending domain.' );
-		}
-
-		if ( $has_dmarc ) {
-			$score += 25;
-			$score_items[] = array( 'label' => 'DMARC Policy (v=DMARC1)', 'status' => 'pass', 'desc' => 'Valid DMARC policy active.' );
-		} else {
-			$score_items[] = array( 'label' => 'DMARC Policy (v=DMARC1)', 'status' => 'fail', 'desc' => 'Missing DMARC policy at _dmarc.' . ( $score_domain ?: 'domain' ) );
-		}
-
-		if ( $has_mx ) {
-			$score += 15;
-			$score_items[] = array( 'label' => 'MX Routing (Mail Exchange)', 'status' => 'pass', 'desc' => 'Valid incoming mail exchangers configured.' );
-		} else {
-			$score_items[] = array( 'label' => 'MX Routing (Mail Exchange)', 'status' => 'warn', 'desc' => 'No MX records found.' );
-		}
-
-		if ( ! $is_freemail && ! empty( $score_domain ) ) {
-			$score += 15;
-			$score_items[] = array( 'label' => 'Domain Reputation Alignment', 'status' => 'pass', 'desc' => 'Using custom business domain (' . esc_html( $score_domain ) . ').' );
-		} else {
-			$score_items[] = array( 'label' => 'Domain Reputation Alignment', 'status' => 'fail', 'desc' => 'Free webmail addresses violate DMARC when sent from servers.' );
-		}
-
-		if ( ! empty( $options['email_async_queue'] ) ) {
-			$score += 10;
-			$score_items[] = array( 'label' => 'Async Non-Blocking Queue', 'status' => 'pass', 'desc' => '0ms checkout/user wait times enabled.' );
-		} else {
-			$score_items[] = array( 'label' => 'Async Non-Blocking Queue', 'status' => 'warn', 'desc' => 'Synchronous SMTP handshakes block page requests.' );
-		}
-
-		$fallback_prov = $options['email_fallback_provider'] ?? 'none';
-		if ( ! empty( $fallback_prov ) && $fallback_prov !== 'none' ) {
-			$score += 10;
-			$score_items[] = array( 'label' => 'High-Availability Failover', 'status' => 'pass', 'desc' => 'Secondary redundancy active (' . strtoupper( $fallback_prov ) . ').' );
-		} else {
-			$score_items[] = array( 'label' => 'High-Availability Failover', 'status' => 'warn', 'desc' => 'No backup mailer configured for automatic failover.' );
-		}
-
-		$score_badge_color = 'var(--og-wp-green)';
-		$score_text = 'Optimal Deliverability';
-		if ( $score < 60 ) {
-			$score_badge_color = 'var(--og-wp-red)';
-			$score_text = 'Action Required (At Risk of Spam / Drops)';
-		} elseif ( $score < 85 ) {
-			$score_badge_color = 'var(--og-wp-gold)';
-			$score_text = 'Good (Deliverability Can Be Hardened)';
-		}
-		?>
-
-		<!-- Deliverability Health Scorecard -->
-		<div style="background:#fff; border:1px solid #cbd5e1; border-radius:8px; padding:20px; margin-bottom:25px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-			<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; border-bottom:1px solid #f1f5f9; padding-bottom:15px; margin-bottom:15px;">
-				<div style="display:flex; align-items:center; gap:15px;">
-					<div style="background:<?php echo $score_badge_color; ?>; color:#fff; border-radius:50%; width:54px; height:54px; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700; box-shadow:0 2px 6px rgba(0,0,0,0.15);">
-						<?php echo $score; ?>
-					</div>
-					<div>
-						<h3 style="margin:0; font-size:16px; color:var(--og-wp-navy);">Deliverability Health Score: <span style="color:<?php echo $score_badge_color; ?>;"><?php echo $score; ?> / 100</span></h3>
-						<p style="margin:3px 0 0 0; color:#646970; font-size:13px;"><?php echo esc_html( $score_text ); ?></p>
-					</div>
+		<!-- Left Sidebar Navigation -->
+		<aside class="w-full lg:w-56 shrink-0 bg-white border border-slate-200 rounded-xl shadow-sm p-3 sticky top-10">
+			<!-- Plugin Brand Header -->
+			<div class="flex items-center gap-2.5 px-3 py-2.5 mb-3 border-b border-slate-100">
+				<div class="w-8 h-8 rounded-lg bg-sky-600 flex items-center justify-center text-white font-bold text-base shadow-sm">
+					⚡
 				</div>
 				<div>
-					<a href="#config-email_dns" onclick="document.getElementById('config-email_dns').scrollIntoView({behavior:'smooth'})" class="button button-secondary" style="font-size:12px;">Inspect DNS Records &rarr;</a>
+					<h1 class="text-sm font-bold text-slate-900 leading-tight m-0">OG of WP</h1>
+					<span class="text-xs text-slate-500 font-medium">v<?php echo esc_html( OG_WP_VERSION ); ?></span>
 				</div>
 			</div>
 
-			<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px;">
-				<?php foreach ( $score_items as $item ) : 
-					$icon = '✅';
-					$bg = '#f0fdf4';
-					$border = '#bbf7d0';
-					$text_col = '#166534';
-					if ( $item['status'] === 'fail' ) {
-						$icon = '❌';
-						$bg = '#fef2f2';
-						$border = '#fecaca';
-						$text_col = '#991b1b';
-					} elseif ( $item['status'] === 'warn' ) {
-						$icon = '⚠️';
-						$bg = '#fffbeb';
-						$border = '#fef3c7';
-						$text_col = '#92400e';
-					}
-				?>
-					<div style="background:<?php echo $bg; ?>; border:1px solid <?php echo $border; ?>; border-radius:6px; padding:10px 12px; font-size:12px;">
-						<div style="font-weight:600; color:<?php echo $text_col; ?>; margin-bottom:2px;">
-							<?php echo $icon . ' ' . esc_html( $item['label'] ); ?>
-						</div>
-						<div style="color:#475569; font-size:11px; line-height:1.4;">
-							<?php echo esc_html( $item['desc'] ); ?>
-						</div>
-					</div>
-				<?php endforeach; ?>
-			</div>
-		</div>
+			<!-- Navigation Links -->
+			<nav class="space-y-1">
+				<button type="button" @click="activeTab = 'dashboard'"
+					:class="activeTab === 'dashboard' ? 'bg-sky-50 text-sky-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'"
+					class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition text-left cursor-pointer">
+					<span class="flex items-center gap-2.5">
+						<span class="text-sm">📊</span> Dashboard
+					</span>
+					<span v-if="securityScore < 100" class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">
+						{{ securityScore }}%
+					</span>
+				</button>
 
-		<div style="max-width: 900px;">
-			<!-- Sub Section 1: Dispatcher Settings -->
-			<div class="og-wp-module-card">
-				<div class="og-wp-module-header" onclick="toggleConfig(event, 'email_settings')">
-					<h3 class="og-wp-module-title" style="margin-left:0;">⚙️ Dispatcher & Connection Configuration</h3>
-					<span class="dashicons dashicons-arrow-down-alt2"></span>
-				</div>
-				<div class="og-wp-module-config open" id="config-email_settings" style="display:block;">
-					<?php do_action( 'og_wp_module_settings_email', $options ); ?>
-					<div style="margin-top:20px; padding-top:15px; border-top:1px solid var(--og-wp-border);">
-						<button type="submit" class="og-wp-btn-primary">Save Email Configuration</button>
-					</div>
-				</div>
-			</div>
+				<button type="button" @click="activeTab = 'modules'"
+					:class="activeTab === 'modules' ? 'bg-sky-50 text-sky-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'"
+					class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition text-left cursor-pointer">
+					<span class="flex items-center gap-2.5">
+						<span class="text-sm">🛡️</span> Security Modules
+					</span>
+					<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold">
+						{{ activeSecurityCount }}/11
+					</span>
+				</button>
 
-			<!-- Sub Section 2: Live Test Mailer & Diagnostics -->
-			<div class="og-wp-module-card">
-				<div class="og-wp-module-header" onclick="toggleConfig(event, 'email_test')">
-					<h3 class="og-wp-module-title" style="margin-left:0;">🚀 Send Test Email & Live Diagnostics</h3>
-					<span class="dashicons dashicons-arrow-down-alt2"></span>
-				</div>
-				<div class="og-wp-module-config" id="config-email_test" style="display:block;">
-					<p style="margin-top:0; color:#646970;">Send a real-time test payload to verify provider authentication, SSL handshakes, and SPF/DKIM delivery headers.</p>
-					
-					<div class="og-wp-form-row">
-						<label>Recipient Email Address</label>
-						<input type="text" id="og_wp_test_to_email" placeholder="you@domain.com" value="<?php echo esc_attr( wp_get_current_user()->user_email ); ?>" style="max-width:400px;">
-					</div>
-					<div style="margin-top:15px;">
-						<button type="button" class="og-wp-btn-primary" id="og_wp_send_test_btn" onclick="sendTestEmail()">Send Test Email</button>
-						<span id="og_wp_test_status" style="margin-left:15px; font-weight:600;"></span>
-					</div>
+				<button type="button" @click="activeTab = 'utilities'"
+					:class="activeTab === 'utilities' ? 'bg-sky-50 text-sky-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'"
+					class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition text-left cursor-pointer">
+					<span class="flex items-center gap-2.5">
+						<span class="text-sm">⚡</span> Utilities
+					</span>
+				</button>
 
-					<div id="og_wp_test_transcript_wrap" style="display:none; margin-top:20px;">
-						<h4 style="margin:0 0 8px 0; font-size:14px; color:var(--og-wp-navy);">Live Protocol Transcript & Debug Log:</h4>
-						<pre class="og-wp-terminal" id="og_wp_test_transcript"></pre>
-					</div>
-				</div>
+				<button type="button" @click="activeTab = 'email'"
+					:class="activeTab === 'email' ? 'bg-sky-50 text-sky-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'"
+					class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition text-left cursor-pointer">
+					<span class="flex items-center gap-2.5">
+						<span class="text-sm">✉️</span> Email Suite
+					</span>
+					<span v-if="options.enable_module_email == 1" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+				</button>
+
+				<button type="button" @click="activeTab = 'branding'"
+					:class="activeTab === 'branding' ? 'bg-sky-50 text-sky-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'"
+					class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition text-left cursor-pointer">
+					<span class="text-sm">🎨</span> Branding
+				</button>
+
+				<button type="button" @click="activeTab = 'logs'"
+					:class="activeTab === 'logs' ? 'bg-sky-50 text-sky-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'"
+					class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition text-left cursor-pointer">
+					<span class="flex items-center gap-2.5">
+						<span class="text-sm">📜</span> Audit Logs
+					</span>
+				</button>
+			</nav>
+
+			<!-- Quick Global Save Action in Sidebar -->
+			<div class="mt-4 pt-3 border-t border-slate-100">
+				<button type="button" @click="saveAllSettings" :disabled="isSaving"
+					class="w-full py-2 px-3 bg-sky-600 hover:bg-sky-700 disabled:bg-sky-400 text-white rounded-lg text-xs font-semibold shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer">
+					<span v-if="isSaving" class="inline-block animate-spin">⏳</span>
+					<span>{{ isSaving ? 'Saving...' : 'Save All Changes' }}</span>
+				</button>
 			</div>
 
-			<!-- Sub Section 3: DNS & Deliverability Verifier -->
-			<div class="og-wp-module-card">
-				<div class="og-wp-module-header" onclick="toggleConfig(event, 'email_dns')">
-					<h3 class="og-wp-module-title" style="margin-left:0;">🛡️ Domain Deliverability & DNS Health (SPF, DMARC, MX)</h3>
-					<span class="dashicons dashicons-arrow-down-alt2"></span>
-				</div>
-				<div class="og-wp-module-config" id="config-email_dns" style="display:block;">
-					<p style="margin-top:0; color:#646970;">Verify whether your sending domain has proper DNS records configured to avoid Gmail & Yahoo spam filters and DMARC drops.</p>
-					
-					<?php
-					$detected_domain = '';
-					$from_em = $options['email_from_email'] ?? get_option( 'admin_email' );
-					if ( strpos( $from_em, '@' ) !== false ) {
-						$detected_domain = substr( strrchr( $from_em, '@' ), 1 );
-					}
-					?>
-					<div class="og-wp-form-row">
-						<label>Sending Domain</label>
-						<div style="display:flex; gap:10px; max-width:500px;">
-							<input type="text" id="og_wp_dns_domain" value="<?php echo esc_attr( $detected_domain ); ?>" placeholder="yourdomain.com">
-							<button type="button" class="button button-secondary" id="og_wp_dns_check_btn" onclick="checkDomainDns()">Verify DNS</button>
-						</div>
-					</div>
-
-					<div id="og_wp_dns_results_wrap" style="display:none; margin-top:15px;">
-						<div id="og_wp_dns_cards" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:15px;"></div>
-					</div>
-				</div>
+			<!-- Status footer -->
+			<div class="mt-4 pt-2 text-[11px] text-slate-500 flex items-center gap-1.5 px-2">
+				<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+				<span>Engine Active</span>
 			</div>
+		</aside>
 
-			<!-- Sub Section 4: Live Email Logs & Audit Trail -->
-			<div class="og-wp-module-card">
-				<div class="og-wp-module-header" onclick="toggleConfig(event, 'email_logs_panel')">
-					<h3 class="og-wp-module-title" style="margin-left:0;">📋 Email Logs & Resend Console</h3>
-					<span class="dashicons dashicons-arrow-down-alt2"></span>
-				</div>
-				<div class="og-wp-module-config" id="config-email_logs_panel" style="display:block;">
-					<?php
-					$search_term   = isset( $_GET['email_search'] ) ? sanitize_text_field( $_GET['email_search'] ) : '';
-					$filter_status = isset( $_GET['email_status'] ) ? sanitize_text_field( $_GET['email_status'] ) : '';
-					$paged         = isset( $_GET['email_paged'] ) ? max( 1, intval( $_GET['email_paged'] ) ) : 1;
-					$per_page      = 15;
-					$offset        = ( $paged - 1 ) * $per_page;
+		<!-- Main Content Area -->
+		<main class="flex-1 min-w-0 w-full space-y-4">
+			
+			<!-- Settings Form Wrapper (captures all inputs for traditional + AJAX saves) -->
+			<form id="og-wp-settings-form" method="post" action="options.php" @submit.prevent="saveAllSettings">
+				<?php settings_fields( 'og_wp_option_group' ); ?>
 
-					$where_clauses = array( '1=1' );
-					$where_args    = array();
-
-					if ( ! empty( $search_term ) ) {
-						$where_clauses[] = '(to_email LIKE %s OR subject LIKE %s)';
-						$like_term = '%' . $wpdb->esc_like( $search_term ) . '%';
-						$where_args[] = $like_term;
-						$where_args[] = $like_term;
-					}
-
-					if ( ! empty( $filter_status ) && $filter_status !== 'all' ) {
-						if ( $filter_status === 'opened' ) {
-							$where_clauses[] = 'open_count > 0';
-						} else {
-							$where_clauses[] = 'status = %s';
-							$where_args[] = $filter_status;
-						}
-					}
-
-					$where_sql = implode( ' AND ', $where_clauses );
-
-					$total_query = "SELECT COUNT(id) FROM $email_table WHERE $where_sql";
-					$total_logs  = ! empty( $where_args ) ? $wpdb->get_var( $wpdb->prepare( $total_query, $where_args ) ) : $wpdb->get_var( $total_query );
-					$total_pages = ceil( $total_logs / $per_page );
-
-					$logs_query = "SELECT id, created_at, to_email, subject, status, provider, retry_count, open_count, opened_at, error_details FROM $email_table WHERE $where_sql ORDER BY created_at DESC LIMIT %d OFFSET %d";
-					$query_args = array_merge( $where_args, array( $per_page, $offset ) );
-					$email_logs = $wpdb->get_results( $wpdb->prepare( $logs_query, $query_args ), ARRAY_A );
-					?>
-
-					<!-- Search, Filter & Bulk Action Toolbar -->
-					<div style="background:#f8fafc; border:1px solid var(--og-wp-border); border-radius:6px; padding:12px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-						<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-							<input type="text" id="og_wp_log_search" value="<?php echo esc_attr( $search_term ); ?>" placeholder="Search recipient or subject..." style="max-width:220px; font-size:12px; padding:5px 8px;">
-							<select id="og_wp_log_status_filter" style="font-size:12px; padding:5px 8px;">
-								<option value="all" <?php selected( $filter_status, 'all' ); ?>>All Statuses</option>
-								<option value="sent" <?php selected( $filter_status, 'sent' ); ?>>Sent / Delivered</option>
-								<option value="opened" <?php selected( $filter_status, 'opened' ); ?>>Opened</option>
-								<option value="failed" <?php selected( $filter_status, 'failed' ); ?>>Failed</option>
-								<option value="queued" <?php selected( $filter_status, 'queued' ); ?>>Queued</option>
-							</select>
-							<button type="button" class="button button-secondary" onclick="filterEmailLogs()">Filter</button>
-							<?php if ( ! empty( $search_term ) || ( ! empty( $filter_status ) && $filter_status !== 'all' ) ) : ?>
-								<a href="<?php echo esc_url( admin_url( 'admin.php?page=og-of-wp#email' ) ); ?>" class="button button-link" style="font-size:12px;">Reset</a>
-							<?php endif; ?>
+				<!-- TAB 1: DASHBOARD -->
+				<section v-show="activeTab === 'dashboard'" class="space-y-4">
+					<!-- Top Metric Cards Row -->
+					<div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+						<!-- Security Score Card -->
+						<div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-4">
+							<div class="relative w-16 h-16 shrink-0 flex items-center justify-center">
+								<svg class="w-16 h-16 transform -rotate-90" viewBox="0 0 100 100">
+									<circle cx="50" cy="50" r="42" stroke="#e2e8f0" stroke-width="8" fill="none"></circle>
+									<circle cx="50" cy="50" r="42" :stroke="scoreColor" stroke-width="8" fill="none"
+										:stroke-dasharray="strokeDasharray" stroke-linecap="round" class="transition-all duration-700"></circle>
+								</svg>
+								<span class="absolute text-base font-bold text-slate-900">{{ securityScore }}</span>
+							</div>
+							<div>
+								<span class="text-xs uppercase tracking-wider font-semibold text-slate-600 block">Security Score</span>
+								<p class="text-xs text-slate-600 m-0 mt-0.5">
+									{{ securityScore >= 80 ? 'Optimal Protection' : (securityScore >= 50 ? 'Moderate Security' : 'Attention Needed') }}
+								</p>
+							</div>
 						</div>
 
-						<div style="display:flex; gap:8px; align-items:center;">
-							<select id="og_wp_bulk_action_select" style="font-size:12px; padding:5px 8px;">
-								<option value="">Bulk Actions</option>
-								<option value="resend">Re-dispatch Selected</option>
-								<option value="delete">Delete Selected</option>
-							</select>
-							<button type="button" class="button button-secondary" onclick="applyEmailBulkAction()">Apply</button>
-							<a href="<?php echo esc_url( admin_url( 'admin-post.php?action=og_wp_export_email_logs' ) ); ?>" class="button button-secondary" style="font-size:12px;">Export CSV</a>
-							<button type="button" class="button button-link-delete" onclick="clearEmailLogs()" style="color:var(--og-wp-red); font-size:12px;">Clear All</button>
+						<!-- Active Modules Card -->
+						<div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
+							<div>
+								<span class="text-xs uppercase tracking-wider font-semibold text-slate-600 block">Active Modules</span>
+								<div class="text-2xl font-bold text-slate-900 mt-1">
+									{{ activeSecurityCount }} <span class="text-xs text-slate-600 font-normal">/ 11 active</span>
+								</div>
+								<p class="text-xs text-slate-600 m-0 mt-0.5">Core protection engines</p>
+							</div>
+							<div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">
+								🛡️
+							</div>
+						</div>
+
+						<!-- Threats Blocked Card -->
+						<div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
+							<div>
+								<span class="text-xs uppercase tracking-wider font-semibold text-slate-600 block">Threats Blocked</span>
+								<div class="text-2xl font-bold text-slate-900 mt-1">
+									<?php echo number_format_i18n( $threats_blocked ); ?>
+								</div>
+								<p class="text-xs text-slate-600 m-0 mt-0.5">WAF blocks in last 24h</p>
+							</div>
+							<div class="w-10 h-10 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center text-lg">
+								🚫
+							</div>
 						</div>
 					</div>
 
-					<?php if ( ! empty( $email_logs ) ) : ?>
-						<table class="wp-list-table widefat fixed striped" style="border: 1px solid var(--og-wp-border); border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-							<thead><tr>
-								<th style="width:30px; text-align:center;"><input type="checkbox" id="og_wp_select_all_logs" onchange="toggleSelectAllLogs(this)"></th>
-								<th style="width:130px;">Date / Time</th>
-								<th style="width:160px;">Recipient</th>
-								<th>Subject</th>
-								<th style="width:85px;">Delivery</th>
-								<th style="width:105px;">Open Tracking</th>
-								<th style="width:85px;">Engine</th>
-								<th style="width:130px; text-align:right;">Actions</th>
-							</tr></thead>
-							<tbody>
-							<?php foreach ( $email_logs as $elog ) : 
-								$st = esc_attr( $elog['status'] );
-								$badge_class = 'status-active';
-								if ( $st === 'failed' ) {
-									$badge_class = 'status-disabled';
-								} elseif ( $st === 'queued' || $st === 'pending' || $st === 'retrying' ) {
-									$badge_class = 'og-wp-badge-queued';
-								}
-								$open_count = intval( $elog['open_count'] ?? 0 );
-							?>
-								<tr>
-									<td style="text-align:center;"><input type="checkbox" class="og-wp-email-checkbox" value="<?php echo intval( $elog['id'] ); ?>"></td>
-									<td style="font-size:11px;"><?php echo esc_html( $elog['created_at'] ); ?></td>
-									<td style="font-size:12px;" title="<?php echo esc_attr( $elog['to_email'] ); ?>">
-										<strong><?php echo esc_html( wp_trim_words( $elog['to_email'], 3, '...' ) ); ?></strong>
-									</td>
-									<td>
-										<strong><?php echo esc_html( $elog['subject'] ); ?></strong>
-										<?php if ( ! empty( $elog['error_details'] ) ) : ?>
-											<div style="font-size:11px; color:var(--og-wp-red); margin-top:2px;">
-												⚠️ <?php echo esc_html( wp_trim_words( $elog['error_details'], 12, '...' ) ); ?>
-											</div>
-										<?php endif; ?>
-									</td>
-									<td><span class="og-wp-module-status <?php echo $badge_class; ?>"><?php echo esc_html( ucfirst( $st ) ); ?></span></td>
-									<td>
-										<?php if ( $open_count > 0 ) : ?>
-											<span style="color:var(--og-wp-green); font-weight:600; font-size:12px;">👁️ <?php echo $open_count; ?> open<?php echo $open_count > 1 ? 's' : ''; ?></span>
-											<div style="font-size:10px; color:#646970;"><?php echo esc_html( substr( $elog['opened_at'], 5, 11 ) ); ?></div>
-										<?php else : ?>
-											<span style="color:#94a3b8; font-size:11px;">Unopened</span>
-										<?php endif; ?>
-									</td>
-									<td style="font-size:12px;">
-										<?php echo esc_html( strtoupper( $elog['provider'] ) ); ?>
-										<?php if ( $elog['retry_count'] > 0 ) : ?>
-											<span style="font-size:10px; color:#646970;">(<?php echo intval( $elog['retry_count'] ); ?> retries)</span>
-										<?php endif; ?>
-									</td>
-									<td style="text-align:right;">
-										<button type="button" class="button button-small" onclick="viewEmail(<?php echo intval( $elog['id'] ); ?>)" style="margin-right:4px;">Preview</button>
-										<button type="button" class="button button-small" onclick="resendEmail(<?php echo intval( $elog['id'] ); ?>)">Resend</button>
-									</td>
-								</tr>
-							<?php endforeach; ?>
-							</tbody>
-						</table>
+					<!-- Quick Actions & Scanner Banner -->
+					<div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+						<div>
+							<h3 class="text-sm font-bold text-slate-900 m-0">Malware & Checksum Scanner</h3>
+							<p class="text-xs text-slate-600 m-0 mt-0.5">Quickly verify core WordPress file integrity and scan plugins for tampered code.</p>
+						</div>
+						<div class="flex items-center gap-3 shrink-0">
+							<span v-if="scanner.result" :class="scanner.isError ? 'text-rose-600' : 'text-emerald-600'" class="text-xs font-semibold">
+								{{ scanner.result }}
+							</span>
+							<button type="button" @click="runMalwareScan" :disabled="scanner.isRunning"
+								class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-500 text-white rounded-lg text-xs font-semibold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+								<span v-if="scanner.isRunning" class="inline-block animate-spin">⚙️</span>
+								<span>{{ scanner.isRunning ? 'Scanning Core Files...' : 'Run Malware Scan Now' }}</span>
+							</button>
+						</div>
+					</div>
 
-						<?php if ( $total_pages > 1 ) : ?>
-							<div class="tablenav" style="margin-top:10px;">
-								<div class="tablenav-pages">
-									<span class="displaying-num"><?php echo $total_logs; ?> transmissions</span>
-									<?php
-									echo paginate_links( array(
-										'base'      => add_query_arg( 'email_paged', '%#%' ) . '#email',
-										'format'    => '',
-										'prev_text' => '&laquo;',
-										'next_text' => '&raquo;',
-										'total'     => $total_pages,
-										'current'   => $paged,
-									) );
-									?>
+					<!-- Settings JSON Import / Export -->
+					<div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+						<h3 class="text-sm font-bold text-slate-900 m-0 mb-3 flex items-center gap-2">
+							<span>🔄</span> Settings Import & Export
+						</h3>
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+							<!-- Export Card -->
+							<div class="bg-slate-50 border border-slate-200 rounded-lg p-3.5 flex flex-col justify-between">
+								<div>
+									<h4 class="text-xs font-bold text-slate-900 m-0">Export Configuration</h4>
+									<p class="text-xs text-slate-600 mt-1 mb-2.5">Download current plugin configurations and module rules into a JSON file.</p>
+									<label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer mb-3">
+										<input type="checkbox" v-model="exportSecrets" class="rounded border-slate-300 text-sky-600">
+										<span>Include API Keys & Passwords</span>
+									</label>
+								</div>
+								<div>
+									<a :href="exportUrl" class="inline-block px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded text-xs font-semibold shadow-sm transition">
+										📥 Download JSON Export
+									</a>
 								</div>
 							</div>
-						<?php endif; ?>
 
-					<?php else : ?>
-						<div style="padding:30px; text-align:center; background:#fff; border:1px dashed #cbd5e1; border-radius:6px; color:#646970;">
-							No email transmissions match your query. Outgoing emails and automated deliveries will be logged here.
+							<!-- Import Card -->
+							<div class="bg-slate-50 border border-slate-200 rounded-lg p-3.5 flex flex-col justify-between">
+								<div>
+									<h4 class="text-xs font-bold text-slate-900 m-0">Import Configuration</h4>
+									<p class="text-xs text-slate-600 mt-1 mb-2.5">Restore plugin settings from a previously exported JSON backup file.</p>
+									<input type="file" ref="importFileInput" accept=".json" class="block w-full text-xs text-slate-600 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 mb-2">
+								</div>
+								<div>
+									<button type="button" @click="handleImportSettings" :disabled="isImporting"
+										class="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 disabled:bg-sky-400 text-white rounded text-xs font-semibold shadow-sm transition cursor-pointer">
+										{{ isImporting ? 'Importing...' : 'Upload & Restore JSON' }}
+									</button>
+								</div>
+							</div>
 						</div>
-					<?php endif; ?>
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<div id="tab-branding" class="og-wp-tab-content">
-		<h2 style="margin-top:0;">Admin Branding</h2>
-		<p>Customize the WordPress admin area to match your premium brand.</p>
-		<div style="max-width: 800px; margin-top: 20px;">
-				<div class="og-wp-module-card">
-					<div class="og-wp-module-config" style="display:block; padding: 20px;">
-						<?php do_action('og_wp_module_settings_branding', $options); ?>
 					</div>
-				</div>
-				<div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--og-wp-border);">
-					<button type="submit" class="og-wp-btn-primary">Save Branding</button>
-				</div>
-		</div>
-	</div>
-	</form>
+				</section>
 
-	<div id="tab-logs" class="og-wp-tab-content">
-		<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-			<h2 style="margin:0;">Audit Log</h2>
-			<a href="<?php echo esc_url( admin_url( 'admin-post.php?action=og_wp_export_logs' ) ); ?>" class="button button-secondary">Export to CSV</a>
-		</div>
-		<?php
-		if ( ! empty( $options['enable_module_audit'] ) ) {
-			global $wpdb;
-			$table_name = $wpdb->prefix . 'og_wp_audit_log';
-			if ( $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name ) {
-				
-				$per_page = 20;
-				$current_page = isset( $_GET['og_wp_paged'] ) ? max( 1, intval( $_GET['og_wp_paged'] ) ) : 1;
-				$offset = ( $current_page - 1 ) * $per_page;
-				
-				$total_items = $wpdb->get_var( "SELECT COUNT(id) FROM $table_name" );
-				$total_pages = ceil( $total_items / $per_page );
+				<!-- TAB 2: SECURITY MODULES (GRID LAYOUT) -->
+				<section v-show="activeTab === 'modules'" class="space-y-4">
+					<div class="flex items-center justify-between flex-wrap gap-2 pb-1">
+						<div>
+							<h2 class="text-base font-bold text-slate-900 m-0">Security Modules</h2>
+							<p class="text-xs text-slate-600 m-0 mt-0.5">Toggle and configure security protection layers. Click any card to expand its settings.</p>
+						</div>
+						<div class="flex items-center gap-2">
+							<input type="text" v-model="moduleSearch" placeholder="Filter modules..." 
+								class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 w-44 bg-white">
+						</div>
+					</div>
 
-				$logs = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $table_name ORDER BY time DESC LIMIT %d OFFSET %d", $per_page, $offset ) );
-				
-				if ( $logs ) {
-					echo '<table class="wp-list-table widefat fixed striped" style="border: 1px solid var(--og-wp-border); border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">';
-					echo '<thead><tr><th>Time</th><th>IP</th><th>User</th><th>Action</th><th>Details</th></tr></thead>';
-					echo '<tbody>';
-					foreach ( $logs as $log ) {
-						$user_display = 'Guest / System';
-						if ( $log->user_id > 0 ) {
-							$user_info = get_userdata( $log->user_id );
-							$user_display = $user_info ? esc_html( $user_info->user_login ) : 'ID: ' . esc_html( $log->user_id );
-						}
+					<!-- Compact Responsive Grid (2-3 columns) -->
+					<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+						<?php foreach ( $security_modules as $key => $info ) : 
+							$field_id = "enable_module_{$key}";
+						?>
+						<div v-show="matchesModule('<?php echo esc_js( $key ); ?>', '<?php echo esc_js( $info['title'] ); ?>')"
+							class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col transition hover:border-slate-300">
+							<!-- Card Header -->
+							<div class="p-3.5 flex items-start justify-between gap-3 cursor-pointer select-none bg-white"
+								@click="toggleConfig('<?php echo esc_js( $key ); ?>')">
+								<div class="flex items-start gap-2.5">
+									<label class="og-switch mt-0.5" @click.stop>
+										<input type="hidden" name="og_wp_options[<?php echo esc_attr( $field_id ); ?>]" value="0">
+										<input type="checkbox" name="og_wp_options[<?php echo esc_attr( $field_id ); ?>]" value="1"
+											v-model="options.<?php echo esc_attr( $field_id ); ?>"
+											true-value="1" false-value="0">
+										<span class="og-slider"></span>
+									</label>
+									<div>
+										<h4 class="text-xs font-bold text-slate-900 m-0 leading-tight">
+											<?php echo esc_html( $info['title'] ); ?>
+										</h4>
+										<p class="text-[11px] text-slate-600 m-0 mt-1 line-clamp-2">
+											<?php echo esc_html( $info['desc'] ); ?>
+										</p>
+									</div>
+								</div>
+								<div class="shrink-0 flex items-center gap-1.5">
+									<span :class="options.<?php echo esc_attr( $field_id ); ?> == '1' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'"
+										class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border">
+										{{ options.<?php echo esc_attr( $field_id ); ?> == '1' ? 'Active' : 'Off' }}
+									</span>
+									<span class="text-xs text-slate-400 transition transform"
+										:class="openConfigs['<?php echo esc_js( $key ); ?>'] ? 'rotate-180' : ''">▾</span>
+								</div>
+							</div>
 
-						echo '<tr>';
-						echo '<td>' . esc_html( $log->time ) . '</td>';
-						echo '<td>' . esc_html( $log->ip_address ) . '</td>';
-						echo '<td>' . $user_display . '</td>';
-						echo '<td><strong>' . esc_html( $log->action ) . '</strong></td>';
-						echo '<td>' . esc_html( $log->details ) . '</td>';
-						echo '</tr>';
-					}
-					echo '</tbody></table>';
+							<!-- Collapsible Configuration Drawer -->
+							<div v-show="openConfigs['<?php echo esc_js( $key ); ?>']"
+								class="border-t border-slate-100 bg-slate-50 p-3.5 text-xs text-slate-700 space-y-3">
+								<?php 
+								if ( ! empty( $module_settings_html[ $key ] ) ) {
+									echo $module_settings_html[ $key ];
+								} else {
+									echo '<p class="text-slate-600 italic m-0">No advanced settings required for this module.</p>';
+								}
+								?>
+							</div>
+						</div>
+						<?php endforeach; ?>
+					</div>
+				</section>
 
-					// Pagination links
-					if ( $total_pages > 1 ) {
-						$page_links = paginate_links( array(
-							'base' => add_query_arg( 'og_wp_paged', '%#%' ),
-							'format' => '',
-							'prev_text' => '&laquo;',
-							'next_text' => '&raquo;',
-							'total' => $total_pages,
-							'current' => $current_page
-						) );
+				<!-- TAB 3: UTILITIES (GRID LAYOUT) -->
+				<section v-show="activeTab === 'utilities'" class="space-y-4">
+					<div>
+						<h2 class="text-base font-bold text-slate-900 m-0">Multipurpose Utilities</h2>
+						<p class="text-xs text-slate-600 m-0 mt-0.5">Enable and configure auxiliary content and optimization tools.</p>
+					</div>
 
-						if ( $page_links ) {
-							echo '<div class="tablenav"><div class="tablenav-pages" style="margin: 1em 0">' . $page_links . '</div></div>';
-						}
-					}
-				} else {
-					echo '<p>No logs found.</p>';
-				}
-			} else {
-				echo '<p>Audit log table has not been created yet.</p>';
-			}
-		} else {
-			echo '<p>Audit Log module is disabled. Please enable it to see activity.</p>';
-		}
-		?>
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+						<?php foreach ( $utility_modules as $key => $info ) : 
+							$field_id = "enable_module_{$key}";
+						?>
+						<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col transition hover:border-slate-300">
+							<div class="p-3.5 flex items-start justify-between gap-3 cursor-pointer select-none bg-white"
+								@click="toggleConfig('<?php echo esc_js( $key ); ?>')">
+								<div class="flex items-start gap-2.5">
+									<label class="og-switch mt-0.5" @click.stop>
+										<input type="hidden" name="og_wp_options[<?php echo esc_attr( $field_id ); ?>]" value="0">
+										<input type="checkbox" name="og_wp_options[<?php echo esc_attr( $field_id ); ?>]" value="1"
+											v-model="options.<?php echo esc_attr( $field_id ); ?>"
+											true-value="1" false-value="0">
+										<span class="og-slider"></span>
+									</label>
+									<div>
+										<h4 class="text-xs font-bold text-slate-900 m-0 leading-tight">
+											<?php echo esc_html( $info['title'] ); ?>
+										</h4>
+										<p class="text-[11px] text-slate-600 m-0 mt-1">
+											<?php echo esc_html( $info['desc'] ); ?>
+										</p>
+									</div>
+								</div>
+								<div class="shrink-0 flex items-center gap-1.5">
+									<span :class="options.<?php echo esc_attr( $field_id ); ?> == '1' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'"
+										class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border">
+										{{ options.<?php echo esc_attr( $field_id ); ?> == '1' ? 'Active' : 'Off' }}
+									</span>
+									<span class="text-xs text-slate-400 transition transform"
+										:class="openConfigs['<?php echo esc_js( $key ); ?>'] ? 'rotate-180' : ''">▾</span>
+								</div>
+							</div>
+
+							<div v-show="openConfigs['<?php echo esc_js( $key ); ?>']"
+								class="border-t border-slate-100 bg-slate-50 p-3.5 text-xs text-slate-700 space-y-3">
+								<?php 
+								if ( ! empty( $module_settings_html[ $key ] ) ) {
+									echo $module_settings_html[ $key ];
+								} else {
+									echo '<p class="text-slate-600 italic m-0">No configuration required.</p>';
+								}
+								?>
+							</div>
+						</div>
+						<?php endforeach; ?>
+					</div>
+				</section>
+
+				<!-- TAB 4: EMAIL & DELIVERABILITY SUITE -->
+				<section v-show="activeTab === 'email'" class="space-y-4">
+					<div class="flex items-center justify-between flex-wrap gap-2">
+						<div>
+							<h2 class="text-base font-bold text-slate-900 m-0">Email & Deliverability Suite</h2>
+							<p class="text-xs text-slate-600 m-0 mt-0.5">Multi-provider routing, zero-blocking async queues, live diagnostics, and DNS health.</p>
+						</div>
+						<div class="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+							<span class="text-xs font-semibold text-slate-700">Mailer Engine:</span>
+							<label class="og-switch">
+								<input type="hidden" name="og_wp_options[enable_module_email]" value="0">
+								<input type="checkbox" name="og_wp_options[enable_module_email]" value="1"
+									v-model="options.enable_module_email" true-value="1" false-value="0">
+								<span class="og-slider"></span>
+							</label>
+							<span :class="options.enable_module_email == '1' ? 'text-emerald-700 font-semibold' : 'text-slate-600'" class="text-xs">
+								{{ options.enable_module_email == '1' ? 'Enabled' : 'Disabled' }}
+							</span>
+						</div>
+					</div>
+
+					<!-- Email Metrics Cards -->
+					<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+						<div class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm">
+							<span class="text-[11px] font-semibold uppercase tracking-wider text-slate-600 block">Primary Provider</span>
+							<div class="text-sm font-bold text-sky-700 mt-1"><?php echo esc_html( $active_provider ); ?></div>
+							<p class="text-[11px] text-slate-600 m-0 mt-0.5">Active Mailer</p>
+						</div>
+						<div class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm">
+							<span class="text-[11px] font-semibold uppercase tracking-wider text-slate-600 block">Delivered Emails</span>
+							<div class="text-xl font-bold text-emerald-600 mt-1"><?php echo number_format_i18n( $email_stats['sent'] ); ?></div>
+							<p class="text-[11px] text-slate-600 m-0 mt-0.5">Successful transmissions</p>
+						</div>
+						<div class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm">
+							<span class="text-[11px] font-semibold uppercase tracking-wider text-slate-600 block">Failed Deliveries</span>
+							<div class="text-xl font-bold text-rose-600 mt-1"><?php echo number_format_i18n( $email_stats['failed'] ); ?></div>
+							<p class="text-[11px] text-slate-600 m-0 mt-0.5">Connection/Auth drops</p>
+						</div>
+						<div class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm flex flex-col justify-between">
+							<div>
+								<span class="text-[11px] font-semibold uppercase tracking-wider text-slate-600 block">Async Queue</span>
+								<div class="text-xl font-bold text-slate-900 mt-1">{{ emailQueueCount }}</div>
+							</div>
+							<div class="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-100">
+								<span class="text-[10px] text-slate-600">Pending Worker</span>
+								<button type="button" @click="flushEmailQueue" :disabled="isFlushingQueue"
+									class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold transition cursor-pointer">
+									{{ isFlushingQueue ? 'Flushing...' : '⚡ Flush Now' }}
+								</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- Deliverability Health Scorecard -->
+					<div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+						<div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
+							<div class="flex items-center gap-3">
+								<div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-sm"
+									:class="<?php echo $d_score; ?> >= 80 ? 'bg-emerald-500' : (<?php echo $d_score; ?> >= 50 ? 'bg-amber-500' : 'bg-rose-500')">
+									<?php echo $d_score; ?>
+								</div>
+								<div>
+									<h4 class="text-xs font-bold text-slate-900 m-0">Deliverability Health Score: <?php echo $d_score; ?> / 100</h4>
+									<p class="text-[11px] text-slate-600 m-0 mt-0.5">
+										<?php echo $d_score >= 80 ? 'Optimal Sender Reputation' : 'Domain DNS Configuration Hardening Recommended'; ?>
+									</p>
+								</div>
+							</div>
+						</div>
+						<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+							<?php foreach ( $score_items as $item ) : 
+								$badge_bg = $item['status'] === 'pass' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : ($item['status'] === 'warn' ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-rose-50 border-rose-200 text-rose-800');
+								$icon = $item['status'] === 'pass' ? '✅' : ($item['status'] === 'warn' ? '⚠️' : '❌');
+							?>
+							<div class="border rounded-lg p-2.5 text-xs <?php echo $badge_bg; ?>">
+								<div class="font-bold flex items-center gap-1.5">
+									<span><?php echo $icon; ?></span> <?php echo esc_html( $item['label'] ); ?>
+								</div>
+								<div class="text-[11px] text-slate-600 mt-1"><?php echo esc_html( $item['desc'] ); ?></div>
+							</div>
+							<?php endforeach; ?>
+						</div>
+					</div>
+
+					<!-- Dispatcher Configuration Drawer -->
+					<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+						<div class="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between cursor-pointer select-none"
+							@click="toggleConfig('email_dispatcher')">
+							<h3 class="text-xs font-bold text-slate-900 m-0 flex items-center gap-2">
+								<span>⚙️</span> Dispatcher & Mail Server Authentication
+							</h3>
+							<span class="text-xs text-slate-400">▾</span>
+						</div>
+						<div v-show="openConfigs['email_dispatcher'] !== false" class="p-4 text-xs text-slate-700">
+							<?php echo $email_settings_html; ?>
+						</div>
+					</div>
+
+					<!-- Live Test Email & Diagnostics -->
+					<div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+						<h3 class="text-xs font-bold text-slate-900 m-0 flex items-center gap-2">
+							<span>🚀</span> Send Test Email & Live Diagnostics
+						</h3>
+						<div class="flex flex-col sm:flex-row gap-2 max-w-xl">
+							<input type="email" v-model="testEmailAddress" placeholder="you@domain.com"
+								class="text-xs px-3 py-2 rounded-lg border border-slate-200 flex-1">
+							<button type="button" @click="sendTestEmail" :disabled="isSendingTest"
+								class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-500 text-white rounded-lg text-xs font-semibold shadow-sm transition shrink-0 cursor-pointer">
+								{{ isSendingTest ? 'Dispatching Payload...' : 'Send Test Email' }}
+							</button>
+						</div>
+						<div v-if="testResult" :class="testResult.success ? 'text-emerald-600' : 'text-rose-600'" class="text-xs font-semibold">
+							{{ testResult.message }}
+						</div>
+						<div v-if="testResult && testResult.transcript" class="mt-2">
+							<span class="text-[11px] font-bold text-slate-700 block mb-1">Live SMTP Protocol Transcript:</span>
+							<pre class="og-terminal">{{ testResult.transcript }}</pre>
+						</div>
+					</div>
+
+					<!-- DNS Health Inspector -->
+					<div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+						<h3 class="text-xs font-bold text-slate-900 m-0 flex items-center gap-2">
+							<span>🛡️</span> Domain DNS Inspector (SPF, DMARC, MX)
+						</h3>
+						<div class="flex flex-col sm:flex-row gap-2 max-w-xl">
+							<input type="text" v-model="dnsDomain" placeholder="yourdomain.com"
+								class="text-xs px-3 py-2 rounded-lg border border-slate-200 flex-1">
+							<button type="button" @click="verifyDns" :disabled="isVerifyingDns"
+								class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold shadow-sm transition shrink-0 cursor-pointer">
+								{{ isVerifyingDns ? 'Querying DNS...' : 'Verify DNS Records' }}
+							</button>
+						</div>
+						<div v-if="dnsResults" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+							<div class="border border-slate-200 rounded-lg p-3 bg-slate-50 text-xs">
+								<div class="flex items-center justify-between font-bold text-slate-800 mb-1">
+									<span>MX Records</span>
+									<span :class="dnsResults.mx.status === 'pass' ? 'text-emerald-600' : 'text-amber-600'">{{ dnsResults.mx.status }}</span>
+								</div>
+								<div class="text-[11px] text-slate-600 font-mono">{{ dnsResults.mx.records.join(', ') || dnsResults.mx.details }}</div>
+							</div>
+							<div class="border border-slate-200 rounded-lg p-3 bg-slate-50 text-xs">
+								<div class="flex items-center justify-between font-bold text-slate-800 mb-1">
+									<span>SPF Record</span>
+									<span :class="dnsResults.spf.status === 'pass' ? 'text-emerald-600' : 'text-rose-600'">{{ dnsResults.spf.status }}</span>
+								</div>
+								<div class="text-[11px] text-slate-600 font-mono break-all">{{ dnsResults.spf.record || dnsResults.spf.details }}</div>
+							</div>
+							<div class="border border-slate-200 rounded-lg p-3 bg-slate-50 text-xs">
+								<div class="flex items-center justify-between font-bold text-slate-800 mb-1">
+									<span>DMARC Record</span>
+									<span :class="dnsResults.dmarc.status === 'pass' ? 'text-emerald-600' : 'text-rose-600'">{{ dnsResults.dmarc.status }}</span>
+								</div>
+								<div class="text-[11px] text-slate-600 font-mono break-all">{{ dnsResults.dmarc.record || dnsResults.dmarc.details }}</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Email Logs Table -->
+					<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden p-4 space-y-3">
+						<div class="flex items-center justify-between flex-wrap gap-2">
+							<h3 class="text-xs font-bold text-slate-900 m-0 flex items-center gap-2">
+								<span>📋</span> Recent Outgoing Deliveries
+							</h3>
+							<div class="flex items-center gap-2">
+								<a href="<?php echo esc_url( $export_email_logs_url ); ?>" class="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold transition">
+									Export CSV
+								</a>
+								<button type="button" @click="clearEmailLogs" class="text-[11px] px-2.5 py-1 text-rose-600 hover:bg-rose-50 rounded font-semibold transition cursor-pointer">
+									Clear Logs
+								</button>
+							</div>
+						</div>
+
+						<div class="overflow-x-auto">
+							<table class="w-full text-left text-xs border-collapse">
+								<thead>
+									<tr class="border-b border-slate-200 text-slate-600 bg-slate-50">
+										<th class="py-2 px-3 font-semibold">Date / Time</th>
+										<th class="py-2 px-3 font-semibold">Recipient</th>
+										<th class="py-2 px-3 font-semibold">Subject</th>
+										<th class="py-2 px-3 font-semibold">Status</th>
+										<th class="py-2 px-3 font-semibold">Opens</th>
+										<th class="py-2 px-3 font-semibold">Engine</th>
+										<th class="py-2 px-3 font-semibold text-right">Actions</th>
+									</tr>
+								</thead>
+								<tbody class="divide-y divide-slate-100">
+									<?php if ( empty( $email_logs ) ) : ?>
+										<tr><td colspan="7" class="py-6 text-center text-slate-600 italic">No outgoing deliveries logged yet.</td></tr>
+									<?php else : ?>
+										<?php foreach ( $email_logs as $l ) : 
+											$status_bg = $l['status'] === 'sent' ? 'bg-emerald-50 text-emerald-700' : ($l['status'] === 'failed' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700');
+										?>
+										<tr class="hover:bg-slate-50 transition">
+											<td class="py-2.5 px-3 text-slate-500 whitespace-nowrap"><?php echo esc_html( substr( $l['created_at'], 0, 16 ) ); ?></td>
+											<td class="py-2.5 px-3 font-medium text-slate-900"><?php echo esc_html( $l['to_email'] ); ?></td>
+											<td class="py-2.5 px-3 text-slate-700"><?php echo esc_html( wp_trim_words( $l['subject'], 6 ) ); ?></td>
+											<td class="py-2.5 px-3 whitespace-nowrap">
+												<span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <?php echo $status_bg; ?>">
+													<?php echo esc_html( $l['status'] ); ?>
+												</span>
+											</td>
+											<td class="py-2.5 px-3 whitespace-nowrap">
+												<?php if ( (int)$l['open_count'] > 0 ) : ?>
+													<span class="text-emerald-600 font-bold">👁️ <?php echo (int)$l['open_count']; ?></span>
+												<?php else : ?>
+													<span class="text-slate-600">—</span>
+												<?php endif; ?>
+											</td>
+											<td class="py-2.5 px-3 uppercase text-[11px] font-semibold text-slate-600"><?php echo esc_html( $l['provider'] ); ?></td>
+											<td class="py-2.5 px-3 text-right whitespace-nowrap space-x-1">
+												<button type="button" @click="viewEmail(<?php echo (int)$l['id']; ?>)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold transition cursor-pointer">Preview</button>
+												<button type="button" @click="resendEmail(<?php echo (int)$l['id']; ?>)" class="px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded text-[11px] font-semibold transition cursor-pointer">Resend</button>
+											</td>
+										</tr>
+										<?php endforeach; ?>
+									<?php endif; ?>
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</section>
+
+				<!-- TAB 5: BRANDING -->
+				<section v-show="activeTab === 'branding'" class="space-y-4">
+					<div>
+						<h2 class="text-base font-bold text-slate-900 m-0">Admin Branding & White Labeling</h2>
+						<p class="text-xs text-slate-600 m-0 mt-0.5">Customize the WordPress administration interface to reflect your client or company brand.</p>
+					</div>
+
+					<div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm text-xs text-slate-700 space-y-3">
+						<?php echo $branding_settings_html; ?>
+					</div>
+				</section>
+
+				<!-- TAB 6: AUDIT LOGS -->
+				<section v-show="activeTab === 'logs'" class="space-y-4">
+					<div class="flex items-center justify-between flex-wrap gap-2">
+						<div>
+							<h2 class="text-base font-bold text-slate-900 m-0">Security Audit Trail</h2>
+							<p class="text-xs text-slate-600 m-0 mt-0.5">Immutable record of logins, administrative events, and security detections.</p>
+						</div>
+						<a href="<?php echo esc_url( $export_logs_url ); ?>" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition">
+							📥 Export Audit CSV
+						</a>
+					</div>
+
+					<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden p-4">
+						<div class="overflow-x-auto">
+							<table class="w-full text-left text-xs border-collapse">
+								<thead>
+									<tr class="border-b border-slate-200 text-slate-600 bg-slate-50">
+										<th class="py-2 px-3 font-semibold">Time</th>
+										<th class="py-2 px-3 font-semibold">IP Address</th>
+										<th class="py-2 px-3 font-semibold">User</th>
+										<th class="py-2 px-3 font-semibold">Action</th>
+										<th class="py-2 px-3 font-semibold">Details</th>
+									</tr>
+								</thead>
+								<tbody class="divide-y divide-slate-100">
+									<?php if ( empty( $audit_logs ) ) : ?>
+										<tr><td colspan="5" class="py-6 text-center text-slate-600 italic">No activity recorded yet.</td></tr>
+									<?php else : ?>
+										<?php foreach ( $audit_logs as $a ) : ?>
+										<tr class="hover:bg-slate-50 transition">
+											<td class="py-2.5 px-3 text-slate-500 whitespace-nowrap"><?php echo esc_html( $a['time'] ); ?></td>
+											<td class="py-2.5 px-3 font-mono text-[11px] text-slate-600"><?php echo esc_html( $a['ip'] ); ?></td>
+											<td class="py-2.5 px-3 text-slate-800 font-medium"><?php echo esc_html( $a['user'] ); ?></td>
+											<td class="py-2.5 px-3 font-bold text-slate-900"><?php echo esc_html( $a['action'] ); ?></td>
+											<td class="py-2.5 px-3 text-slate-600"><?php echo esc_html( $a['details'] ); ?></td>
+										</tr>
+										<?php endforeach; ?>
+									<?php endif; ?>
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</section>
+
+			</form>
+		</main>
 	</div>
 
 	<!-- Email Preview Modal -->
-	<div class="og-wp-modal-overlay" id="og_wp_email_modal">
-		<div class="og-wp-modal-dialog" style="max-width:850px;">
-			<div class="og-wp-modal-header">
-				<h3 id="og_wp_modal_title">Email Transmission Details</h3>
-				<button type="button" class="og-wp-modal-close" onclick="closeEmailModal()">&times;</button>
+	<div v-if="emailModal.visible" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+		<div class="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+			<div class="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
+				<h3 class="text-xs font-bold m-0 flex items-center gap-2">
+					<span>✉️</span> {{ emailModal.data.subject || 'Email Transmission Details' }}
+				</h3>
+				<button type="button" @click="emailModal.visible = false" class="text-slate-400 hover:text-white text-lg leading-none">&times;</button>
 			</div>
-			<div class="og-wp-modal-body">
-				<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:12px; margin-bottom:15px; font-size:13px; line-height:1.6;">
-					<div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;">
-						<div><strong>To:</strong> <span id="og_wp_modal_to"></span></div>
-						<div><strong>Engine:</strong> <span id="og_wp_modal_provider" style="font-weight:600; color:var(--og-wp-navy);"></span></div>
-					</div>
-					<div><strong>Subject:</strong> <span id="og_wp_modal_subject"></span></div>
-					<div style="margin-top:4px; display:flex; gap:15px; flex-wrap:wrap; font-size:12px; color:#475569;">
-						<span><strong>Queued/Sent:</strong> <span id="og_wp_modal_date"></span></span>
-						<span><strong>Status:</strong> <span id="og_wp_modal_status"></span></span>
-						<span><strong>Open Tracking:</strong> <span id="og_wp_modal_opens" style="font-weight:600;"></span></span>
-						<span id="og_wp_modal_retries_wrap"><strong>Retries:</strong> <span id="og_wp_modal_retries">0</span></span>
-					</div>
-					<div id="og_wp_modal_error_wrap" style="display:none; color:var(--og-wp-red); margin-top:8px; background:#fef2f2; padding:6px 10px; border-radius:4px; font-size:12px;">
-						<strong>Error Details:</strong> <span id="og_wp_modal_error"></span>
-					</div>
+			<div class="p-4 overflow-y-auto space-y-3 flex-1 text-xs">
+				<div class="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+					<div><strong>To:</strong> {{ emailModal.data.to }}</div>
+					<div><strong>Engine:</strong> {{ emailModal.data.provider }}</div>
+					<div><strong>Date:</strong> {{ emailModal.data.created_at }}</div>
+					<div><strong>Status:</strong> <span class="uppercase font-bold text-sky-700">{{ emailModal.data.status }}</span></div>
 				</div>
-
-				<!-- Modal Tabs -->
-				<div style="display:flex; gap:8px; border-bottom:1px solid var(--og-wp-border); margin-bottom:12px; padding-bottom:8px;">
-					<button type="button" class="button button-small" id="og_wp_tabbtn_html" onclick="switchModalView('html')" style="font-weight:600;">Rendered HTML</button>
-					<button type="button" class="button button-small" id="og_wp_tabbtn_text" onclick="switchModalView('text')">Raw Text</button>
-					<button type="button" class="button button-small" id="og_wp_tabbtn_headers" onclick="switchModalView('headers')">Technical Headers</button>
+				<div v-if="emailModal.data.error_details" class="p-2.5 bg-rose-50 border border-rose-200 rounded text-rose-700 font-medium">
+					⚠️ {{ emailModal.data.error_details }}
 				</div>
-
-				<div id="og_wp_modal_view_html" style="border:1px solid #cbd5e1; border-radius:4px; overflow:hidden; min-height:260px; background:#fff;">
-					<iframe id="og_wp_modal_iframe" style="width:100%; height:320px; border:none; display:block;"></iframe>
+				<div class="flex gap-2 border-b border-slate-200 pb-2">
+					<button type="button" @click="emailModal.view = 'html'"
+						:class="emailModal.view === 'html' ? 'bg-sky-50 text-sky-700 font-bold' : 'text-slate-600'"
+						class="px-2.5 py-1 rounded text-xs cursor-pointer">HTML Preview</button>
+					<button type="button" @click="emailModal.view = 'text'"
+						:class="emailModal.view === 'text' ? 'bg-sky-50 text-sky-700 font-bold' : 'text-slate-600'"
+						class="px-2.5 py-1 rounded text-xs cursor-pointer">Plain Text</button>
+					<button type="button" @click="emailModal.view = 'headers'"
+						:class="emailModal.view === 'headers' ? 'bg-sky-50 text-sky-700 font-bold' : 'text-slate-600'"
+						class="px-2.5 py-1 rounded text-xs cursor-pointer">Headers</button>
 				</div>
-
-				<div id="og_wp_modal_view_text" style="display:none;">
-					<pre id="og_wp_modal_plain_text" class="og-wp-terminal" style="background:#f8fafc; color:#334155; border:1px solid #cbd5e1; max-height:320px;"></pre>
+				<div v-show="emailModal.view === 'html'" class="border border-slate-200 rounded overflow-hidden">
+					<iframe :srcdoc="emailModal.data.message" class="w-full h-64 border-0"></iframe>
 				</div>
-
-				<div id="og_wp_modal_view_headers" style="display:none;">
-					<pre id="og_wp_modal_headers" class="og-wp-terminal" style="max-height:320px; font-size:12px;"></pre>
+				<div v-show="emailModal.view === 'text'">
+					<pre class="og-terminal max-h-64">{{ emailModal.data.plain_text || 'No text content.' }}</pre>
 				</div>
+				<div v-show="emailModal.view === 'headers'">
+					<pre class="og-terminal max-h-64">{{ emailModal.data.headers }}</pre>
+				</div>
+			</div>
+			<div class="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex justify-end">
+				<button type="button" @click="emailModal.visible = false" class="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded text-xs font-semibold shadow-sm transition cursor-pointer">
+					Close
+				</button>
 			</div>
 		</div>
 	</div>
-
 </div>
 
 <script>
-function switchTab(evt, tabName) {
-	evt.preventDefault();
-	var i, tabcontent, navtabs;
-	tabcontent = document.getElementsByClassName("og-wp-tab-content");
-	for (i = 0; i < tabcontent.length; i++) {
-		tabcontent[i].classList.remove("active");
-	}
-	navtabs = document.getElementsByClassName("og-wp-nav-tab");
-	for (i = 0; i < navtabs.length; i++) {
-		navtabs[i].classList.remove("active");
-	}
-	document.getElementById("tab-" + tabName).classList.add("active");
-	evt.currentTarget.classList.add("active");
-}
-
-function toggleConfig(evt, key) {
-	var configPanel = document.getElementById("config-" + key);
-	if (configPanel.style.display === "block") {
-		configPanel.style.display = "none";
-	} else {
-		configPanel.style.display = "block";
-	}
-}
-
-function updateStatus(checkbox, key) {
-	var statusBadge = document.getElementById("status-" + key);
-	if (checkbox.checked) {
-		statusBadge.textContent = "Active";
-		statusBadge.className = "og-wp-module-status status-active";
-		document.getElementById("config-" + key).style.display = "block";
-	} else {
-		statusBadge.textContent = "Disabled";
-		statusBadge.className = "og-wp-module-status status-disabled";
-	}
-}
-
-function runMalwareScan() {
-	var btn = document.getElementById("og-wp-run-scan-btn");
-	var resultSpan = document.getElementById("og-wp-scan-result");
-	
-	btn.disabled = true;
-	btn.textContent = "Scanning...";
-	resultSpan.textContent = "";
-
-	var formData = new URLSearchParams();
-	formData.append('action', 'og_wp_run_scan');
-	// In WP, admin-ajax.php is at ajaxurl (but it might not be defined globally on all pages if not enqueued, so we'll use a relative path since this is an admin page)
-	var ajaxUrl = "<?php echo admin_url('admin-ajax.php'); ?>";
-
-	fetch(ajaxUrl, {
-		method: 'POST',
-		body: formData,
-		headers: {
-			'Content-Type': 'application/x-www-form-urlencoded'
+// Tailwind Preflight Disable to preserve WordPress Core Admin
+if (window.tailwind) {
+	tailwind.config = {
+		corePlugins: {
+			preflight: false
 		}
-	})
-	.then(response => response.json())
-	.then(data => {
-		btn.disabled = false;
-		btn.textContent = "Run Malware Scan Now";
-		if ( data.success ) {
-			resultSpan.style.color = "var(--og-wp-green)";
-			resultSpan.textContent = data.data;
-		} else {
-			resultSpan.style.color = "var(--og-wp-red)";
-			resultSpan.textContent = "Scan failed: " + (data.data || 'Unknown error');
-		}
-	})
-	.catch(err => {
-		btn.disabled = false;
-		btn.textContent = "Run Malware Scan Now";
-		resultSpan.style.color = "var(--og-wp-red)";
-		resultSpan.textContent = "Request failed.";
-	});
+	};
 }
 
-function sendTestEmail() {
-	var btn = document.getElementById("og_wp_send_test_btn");
-	var status = document.getElementById("og_wp_test_status");
-	var transcriptWrap = document.getElementById("og_wp_test_transcript_wrap");
-	var transcript = document.getElementById("og_wp_test_transcript");
-	var toEmail = document.getElementById("og_wp_test_to_email").value.trim();
-
-	if (!toEmail) {
-		alert("Please enter a valid recipient email address.");
+(function() {
+	if (typeof Vue === 'undefined') {
+		console.error('Vue 3 is not loaded.');
 		return;
 	}
 
-	btn.disabled = true;
-	btn.textContent = "Sending Test Payload...";
-	status.textContent = "";
-	status.style.color = "var(--og-wp-navy)";
-	transcriptWrap.style.display = "none";
-	transcript.textContent = "";
+	const { createApp, ref, computed } = Vue;
 
-	var formData = new URLSearchParams();
-	formData.append("action", "og_wp_send_test_email");
-	formData.append("to_email", toEmail);
+	createApp({
+		setup() {
+			const activeTab = ref('dashboard');
+			const isSaving = ref(false);
+			const isImporting = ref(false);
+			const isFlushingQueue = ref(false);
+			const isSendingTest = ref(false);
+			const isVerifyingDns = ref(false);
+			const exportSecrets = ref(false);
+			const moduleSearch = ref('');
+			const testEmailAddress = ref('<?php echo esc_js( wp_get_current_user()->user_email ); ?>');
+			const dnsDomain = ref('<?php echo esc_js( $score_domain ); ?>');
+			const emailQueueCount = ref(<?php echo (int) $email_stats['queued']; ?>);
 
-	fetch("<?php echo admin_url('admin-ajax.php'); ?>", {
-		method: "POST",
-		body: formData,
-		headers: { "Content-Type": "application/x-www-form-urlencoded" }
-	})
-	.then(res => res.json())
-	.then(data => {
-		btn.disabled = false;
-		btn.textContent = "Send Test Email";
-		if (data.success) {
-			status.style.color = "var(--og-wp-green)";
-			status.textContent = data.data.message;
-		} else {
-			status.style.color = "var(--og-wp-red)";
-			status.textContent = (data.data && data.data.message) ? data.data.message : "Failed to deliver test email.";
-		}
-		if (data.data && data.data.transcript) {
-			transcriptWrap.style.display = "block";
-			transcript.textContent = data.data.transcript;
-		}
-	})
-	.catch(err => {
-		btn.disabled = false;
-		btn.textContent = "Send Test Email";
-		status.style.color = "var(--og-wp-red)";
-		status.textContent = "Network error during test.";
-	});
-}
+			const options = ref(<?php echo wp_json_encode( $options ); ?> || {});
+			const openConfigs = ref({});
 
-function checkDomainDns() {
-	var btn = document.getElementById("og_wp_dns_check_btn");
-	var domain = document.getElementById("og_wp_dns_domain").value.trim();
-	var resultsWrap = document.getElementById("og_wp_dns_results_wrap");
-	var cardsContainer = document.getElementById("og_wp_dns_cards");
+			const toast = ref({ visible: false, message: '', type: 'success' });
+			const scanner = ref({ isRunning: false, result: '', isError: false });
+			const testResult = ref(null);
+			const dnsResults = ref(null);
+			const emailModal = ref({ visible: false, view: 'html', data: {} });
 
-	if (!domain) {
-		alert("Please enter a domain name to inspect.");
-		return;
-	}
-
-	btn.disabled = true;
-	btn.textContent = "Querying DNS...";
-	cardsContainer.innerHTML = "";
-	resultsWrap.style.display = "none";
-
-	var formData = new URLSearchParams();
-	formData.append("action", "og_wp_check_domain_dns");
-	formData.append("domain", domain);
-
-	fetch("<?php echo admin_url('admin-ajax.php'); ?>", {
-		method: "POST",
-		body: formData,
-		headers: { "Content-Type": "application/x-www-form-urlencoded" }
-	})
-	.then(res => res.json())
-	.then(data => {
-		btn.disabled = false;
-		btn.textContent = "Verify DNS";
-		if (data.success) {
-			resultsWrap.style.display = "block";
-			var r = data.data;
-
-			function getBadge(status) {
-				if (status === "pass") return '<span class="og-wp-module-status status-active">Pass</span>';
-				if (status === "warning") return '<span class="og-wp-module-status og-wp-badge-queued">Warning</span>';
-				return '<span class="og-wp-module-status status-disabled">Missing</span>';
+			function showToast(message, type = 'success') {
+				toast.value = { visible: true, message, type };
+				setTimeout(() => { toast.value.visible = false; }, 3500);
 			}
 
-			var mxHtml = '<div style="background:#fff; border:1px solid var(--og-wp-border); border-radius:6px; padding:15px;">' +
-				'<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><strong>MX Records</strong>' + getBadge(r.mx.status) + '</div>' +
-				'<div style="font-size:12px; color:#646970;">' + (r.mx.records.length ? r.mx.records.join("<br>") : r.mx.details) + '</div></div>';
+			// Reactive security calculations
+			const securityModuleKeys = [
+				'auth', 'waf', 'files', 'scanner', 'spam',
+				'headers', 'audit', 'ssl', 'db', 'user', 'hardening'
+			];
 
-			var spfHtml = '<div style="background:#fff; border:1px solid var(--og-wp-border); border-radius:6px; padding:15px;">' +
-				'<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><strong>SPF Record (TXT)</strong>' + getBadge(r.spf.status) + '</div>' +
-				'<div style="font-size:12px; color:#646970; word-break:break-all;">' + (r.spf.record ? '<code style="background:#f1f5f9; padding:2px 4px; border-radius:3px;">' + r.spf.record + '</code>' : r.spf.details) + '</div></div>';
+			const activeSecurityCount = computed(() => {
+				let count = 0;
+				securityModuleKeys.forEach(k => {
+					if (options.value['enable_module_' + k] == '1') count++;
+				});
+				return count;
+			});
 
-			var dmarcHtml = '<div style="background:#fff; border:1px solid var(--og-wp-border); border-radius:6px; padding:15px;">' +
-				'<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><strong>DMARC Record</strong>' + getBadge(r.dmarc.status) + '</div>' +
-				'<div style="font-size:12px; color:#646970; word-break:break-all;">' + (r.dmarc.record ? '<code style="background:#f1f5f9; padding:2px 4px; border-radius:3px;">' + r.dmarc.record + '</code>' : r.dmarc.details + '<br><small style="color:#d97706;">Recommendation: Add TXT record at _dmarc.' + r.domain + ' with value "v=DMARC1; p=none;"</small>') + '</div></div>';
+			const securityScore = computed(() => {
+				return Math.round((activeSecurityCount.value / 11) * 100);
+			});
 
-			cardsContainer.innerHTML = mxHtml + spfHtml + dmarcHtml;
-		} else {
-			alert(data.data || "DNS query failed.");
-		}
-	})
-	.catch(err => {
-		btn.disabled = false;
-		btn.textContent = "Verify DNS";
-		alert("DNS query request failed.");
-	});
-}
+			const scoreColor = computed(() => {
+				if (securityScore.value >= 80) return '#10b981';
+				if (securityScore.value >= 50) return '#f59e0b';
+				return '#ef4444';
+			});
 
-function resendEmail(logId) {
-	if (!confirm("Are you sure you want to re-dispatch this email?")) return;
+			const strokeDasharray = computed(() => {
+				const circ = 2 * Math.PI * 42; // ~263.89
+				const val = (securityScore.value / 100) * circ;
+				return `${val}, ${circ}`;
+			});
 
-	var formData = new URLSearchParams();
-	formData.append("action", "og_wp_resend_email");
-	formData.append("log_id", logId);
+			const exportUrl = computed(() => {
+				return '<?php echo admin_url( 'admin-ajax.php' ); ?>?action=og_wp_export_settings&include_secrets=' + (exportSecrets.value ? '1' : '0');
+			});
 
-	fetch("<?php echo admin_url('admin-ajax.php'); ?>", {
-		method: "POST",
-		body: formData,
-		headers: { "Content-Type": "application/x-www-form-urlencoded" }
-	})
-	.then(res => res.json())
-	.then(data => {
-		if (data.success) {
-			alert(data.data);
-			window.location.reload();
-		} else {
-			alert("Error: " + (data.data || "Failed to resend."));
-		}
-	});
-}
-
-function switchModalView(view) {
-	document.getElementById("og_wp_modal_view_html").style.display = (view === 'html') ? 'block' : 'none';
-	document.getElementById("og_wp_modal_view_text").style.display = (view === 'text') ? 'block' : 'none';
-	document.getElementById("og_wp_modal_view_headers").style.display = (view === 'headers') ? 'block' : 'none';
-
-	document.getElementById("og_wp_tabbtn_html").style.fontWeight = (view === 'html') ? '600' : 'normal';
-	document.getElementById("og_wp_tabbtn_text").style.fontWeight = (view === 'text') ? '600' : 'normal';
-	document.getElementById("og_wp_tabbtn_headers").style.fontWeight = (view === 'headers') ? '600' : 'normal';
-}
-
-function viewEmail(logId) {
-	var formData = new URLSearchParams();
-	formData.append("action", "og_wp_view_email");
-	formData.append("log_id", logId);
-
-	fetch("<?php echo admin_url('admin-ajax.php'); ?>", {
-		method: "POST",
-		body: formData,
-		headers: { "Content-Type": "application/x-www-form-urlencoded" }
-	})
-	.then(res => res.json())
-	.then(data => {
-		if (data.success) {
-			var d = data.data;
-			document.getElementById("og_wp_modal_to").textContent = d.to;
-			document.getElementById("og_wp_modal_subject").textContent = d.subject;
-			document.getElementById("og_wp_modal_date").textContent = d.created_at;
-			document.getElementById("og_wp_modal_status").textContent = d.status.toUpperCase();
-			document.getElementById("og_wp_modal_provider").textContent = d.provider;
-			document.getElementById("og_wp_modal_retries").textContent = d.retry_count || 0;
-
-			var opensText = "Unopened";
-			if (d.open_count > 0) {
-				opensText = "👁️ " + d.open_count + " open(s) (First: " + d.opened_at + ")";
-			}
-			document.getElementById("og_wp_modal_opens").textContent = opensText;
-
-			var errWrap = document.getElementById("og_wp_modal_error_wrap");
-			if (d.error_details) {
-				errWrap.style.display = "block";
-				document.getElementById("og_wp_modal_error").textContent = d.error_details;
-			} else {
-				errWrap.style.display = "none";
+			function toggleConfig(key) {
+				openConfigs.value[key] = !openConfigs.value[key];
 			}
 
-			// Render HTML in iframe
-			var iframe = document.getElementById("og_wp_modal_iframe");
-			iframe.srcdoc = d.message;
-
-			// Plain text view
-			document.getElementById("og_wp_modal_plain_text").textContent = d.plain_text || "No text content.";
-
-			// Headers view
-			var headersFormatted = "Headers:\n" + (d.headers || "Standard WordPress Headers") + "\n\nAttachments:\n" + (d.attachments || "None");
-			document.getElementById("og_wp_modal_headers").textContent = headersFormatted;
-
-			switchModalView('html');
-			document.getElementById("og_wp_email_modal").style.display = "flex";
-		} else {
-			alert("Could not load email details.");
-		}
-	});
-}
-
-function closeEmailModal() {
-	document.getElementById("og_wp_email_modal").style.display = "none";
-}
-
-function filterEmailLogs() {
-	var search = document.getElementById("og_wp_log_search").value.trim();
-	var status = document.getElementById("og_wp_log_status_filter").value;
-
-	var url = new URL(window.location.href);
-	if (search) {
-		url.searchParams.set("email_search", search);
-	} else {
-		url.searchParams.delete("email_search");
-	}
-
-	if (status && status !== "all") {
-		url.searchParams.set("email_status", status);
-	} else {
-		url.searchParams.delete("email_status");
-	}
-
-	url.searchParams.set("email_paged", "1");
-	url.hash = "email";
-	window.location.href = url.toString();
-}
-
-function toggleSelectAllLogs(master) {
-	var checkboxes = document.querySelectorAll(".og-wp-email-checkbox");
-	checkboxes.forEach(function(cb) {
-		cb.checked = master.checked;
-	});
-}
-
-function applyEmailBulkAction() {
-	var action = document.getElementById("og_wp_bulk_action_select").value;
-	if (!action) {
-		alert("Please select a bulk action.");
-		return;
-	}
-
-	var checkedBoxes = document.querySelectorAll(".og-wp-email-checkbox:checked");
-	if (checkedBoxes.length === 0) {
-		alert("Please select at least one email log row.");
-		return;
-	}
-
-	var ids = [];
-	checkedBoxes.forEach(function(cb) {
-		ids.push(cb.value);
-	});
-
-	if (action === "delete") {
-		if (!confirm("Are you sure you want to delete " + ids.length + " selected log(s)?")) return;
-
-		var formData = new URLSearchParams();
-		formData.append("action", "og_wp_bulk_delete_email_logs");
-		ids.forEach(function(id) { formData.append("ids[]", id); });
-
-		fetch("<?php echo admin_url('admin-ajax.php'); ?>", {
-			method: "POST",
-			body: formData,
-			headers: { "Content-Type": "application/x-www-form-urlencoded" }
-		})
-		.then(res => res.json())
-		.then(data => {
-			if (data.success) {
-				alert(data.data);
-				window.location.reload();
-			} else {
-				alert("Error: " + data.data);
+			function matchesModule(key, title) {
+				if (!moduleSearch.value) return true;
+				const q = moduleSearch.value.toLowerCase();
+				return key.toLowerCase().includes(q) || title.toLowerCase().includes(q);
 			}
-		});
-	} else if (action === "resend") {
-		if (!confirm("Are you sure you want to re-dispatch " + ids.length + " selected email(s)?")) return;
 
-		var formData = new URLSearchParams();
-		formData.append("action", "og_wp_bulk_resend_email_logs");
-		ids.forEach(function(id) { formData.append("ids[]", id); });
+			// Save all settings via AJAX
+			async function saveAllSettings() {
+				isSaving.value = true;
+				try {
+					const form = document.getElementById('og-wp-settings-form');
+					const formData = new FormData(form);
+					formData.append('action', 'og_wp_save_all_settings');
+					formData.append('og_wp_nonce', '<?php echo wp_create_nonce( 'og_wp_admin_ajax' ); ?>');
 
-		fetch("<?php echo admin_url('admin-ajax.php'); ?>", {
-			method: "POST",
-			body: formData,
-			headers: { "Content-Type": "application/x-www-form-urlencoded" }
-		})
-		.then(res => res.json())
-		.then(data => {
-			if (data.success) {
-				alert(data.data);
-				window.location.reload();
-			} else {
-				alert("Error: " + data.data);
+					const res = await fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
+						method: 'POST',
+						body: formData
+					});
+					const data = await res.json();
+					if (data.success) {
+						showToast(data.data && data.data.message ? data.data.message : 'Settings saved successfully!');
+					} else {
+						showToast('Save failed: ' + (data.data || 'Unknown error'), 'error');
+					}
+				} catch (err) {
+					showToast('Error saving settings: ' + err.message, 'error');
+				} finally {
+					isSaving.value = false;
+				}
 			}
-		});
-	}
-}
 
-function clearEmailLogs() {
-	if (!confirm("Are you sure you want to permanently clear all email transmission logs?")) return;
+			// Malware scan
+			async function runMalwareScan() {
+				scanner.value = { isRunning: true, result: '', isError: false };
+				const formData = new URLSearchParams();
+				formData.append('action', 'og_wp_run_scan');
+				formData.append('og_wp_nonce', '<?php echo wp_create_nonce( 'og_wp_admin_ajax' ); ?>');
 
-	var formData = new URLSearchParams();
-	formData.append("action", "og_wp_clear_email_logs");
-
-	fetch("<?php echo admin_url('admin-ajax.php'); ?>", {
-		method: "POST",
-		body: formData,
-		headers: { "Content-Type": "application/x-www-form-urlencoded" }
-	})
-	.then(res => res.json())
-	.then(data => {
-		if (data.success) {
-			alert(data.data);
-			window.location.reload();
-		} else {
-			alert("Error: " + data.data);
-		}
-	});
-}
-
-function flushEmailQueue() {
-	var btn = document.getElementById("og_wp_flush_queue_btn");
-	if (btn) {
-		btn.disabled = true;
-		btn.textContent = "Flushing...";
-	}
-
-	var formData = new URLSearchParams();
-	formData.append("action", "og_wp_flush_email_queue");
-
-	fetch("<?php echo admin_url('admin-ajax.php'); ?>", {
-		method: "POST",
-		body: formData,
-		headers: { "Content-Type": "application/x-www-form-urlencoded" }
-	})
-	.then(res => res.json())
-	.then(data => {
-		if (btn) {
-			btn.disabled = false;
-			btn.textContent = "⚡ Flush Now";
-		}
-		if (data.success) {
-			alert(data.data.message);
-			window.location.reload();
-		} else {
-			alert("Error: " + (data.data || "Could not flush queue"));
-		}
-	})
-	.catch(err => {
-		if (btn) {
-			btn.disabled = false;
-			btn.textContent = "⚡ Flush Now";
-		}
-		alert("Network error flushing queue: " + err);
-	});
-}
-
-// Preserve active tab from location hash on load
-document.addEventListener("DOMContentLoaded", function() {
-	if (window.location.hash) {
-		var tab = window.location.hash.replace("#", "");
-		var tabContent = document.getElementById("tab-" + tab);
-		if (tabContent) {
-			var tabLink = document.querySelector('a.og-wp-nav-tab[href="#' + tab + '"]');
-			if (tabLink) {
-				switchTab({ preventDefault: function(){}, currentTarget: tabLink }, tab);
+				try {
+					const res = await fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
+						method: 'POST',
+						body: formData
+					});
+					const data = await res.json();
+					if (data.success) {
+						scanner.value = { isRunning: false, result: data.data, isError: false };
+						showToast('Scan complete: ' + data.data);
+					} else {
+						scanner.value = { isRunning: false, result: data.data || 'Scan failed', isError: true };
+						showToast('Scan error: ' + (data.data || 'Failed'), 'error');
+					}
+				} catch (e) {
+					scanner.value = { isRunning: false, result: 'Network error', isError: true };
+					showToast('Network error during scan', 'error');
+				}
 			}
+
+			// Import settings
+			async function handleImportSettings() {
+				const fileInput = document.querySelector('input[type="file"]');
+				if (!fileInput || !fileInput.files.length) {
+					alert('Please choose a valid JSON settings file.');
+					return;
+				}
+				isImporting.value = true;
+				const formData = new FormData();
+				formData.append('action', 'og_wp_import_settings');
+				formData.append('og_wp_nonce', '<?php echo wp_create_nonce( 'og_wp_admin_ajax' ); ?>');
+				formData.append('settings_file', fileInput.files[0]);
+
+				try {
+					const res = await fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
+						method: 'POST',
+						body: formData
+					});
+					const data = await res.json();
+					if (data.success) {
+						alert(data.data || 'Settings imported!');
+						window.location.reload();
+					} else {
+						alert('Import error: ' + (data.data || 'Failed'));
+					}
+				} catch (e) {
+					alert('Error importing: ' + e.message);
+				} finally {
+					isImporting.value = false;
+				}
+			}
+
+			// Send test email
+			async function sendTestEmail() {
+				if (!testEmailAddress.value) {
+					alert('Please enter a recipient email.');
+					return;
+				}
+				isSendingTest.value = true;
+				testResult.value = null;
+
+				const formData = new URLSearchParams();
+				formData.append('action', 'og_wp_send_test_email');
+				formData.append('og_wp_nonce', '<?php echo wp_create_nonce( 'og_wp_admin_ajax' ); ?>');
+				formData.append('to_email', testEmailAddress.value);
+
+				try {
+					const res = await fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
+						method: 'POST',
+						body: formData
+					});
+					const data = await res.json();
+					testResult.value = data.data || { success: data.success, message: 'Dispatched' };
+					showToast(data.success ? 'Test email dispatched' : 'Test delivery failed', data.success ? 'success' : 'error');
+				} catch (e) {
+					testResult.value = { success: false, message: 'Network error: ' + e.message };
+				} finally {
+					isSendingTest.value = false;
+				}
+			}
+
+			// Verify DNS
+			async function verifyDns() {
+				if (!dnsDomain.value) {
+					alert('Please enter a domain to check.');
+					return;
+				}
+				isVerifyingDns.value = true;
+				dnsResults.value = null;
+
+				const formData = new URLSearchParams();
+				formData.append('action', 'og_wp_check_domain_dns');
+				formData.append('og_wp_nonce', '<?php echo wp_create_nonce( 'og_wp_admin_ajax' ); ?>');
+				formData.append('domain', dnsDomain.value);
+
+				try {
+					const res = await fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
+						method: 'POST',
+						body: formData
+					});
+					const data = await res.json();
+					if (data.success) {
+						dnsResults.value = data.data;
+						showToast('DNS verification complete');
+					} else {
+						alert(data.data || 'DNS check failed');
+					}
+				} catch (e) {
+					alert('DNS check error: ' + e.message);
+				} finally {
+					isVerifyingDns.value = false;
+				}
+			}
+
+			// Flush queue
+			async function flushEmailQueue() {
+				isFlushingQueue.value = true;
+				const formData = new URLSearchParams();
+				formData.append('action', 'og_wp_flush_email_queue');
+				formData.append('og_wp_nonce', '<?php echo wp_create_nonce( 'og_wp_admin_ajax' ); ?>');
+
+				try {
+					const res = await fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
+						method: 'POST',
+						body: formData
+					});
+					const data = await res.json();
+					if (data.success) {
+						emailQueueCount.value = 0;
+						showToast(data.data && data.data.message ? data.data.message : 'Queue flushed successfully!');
+					} else {
+						showToast('Flush failed: ' + (data.data || 'Error'), 'error');
+					}
+				} catch (e) {
+					showToast('Error flushing queue', 'error');
+				} finally {
+					isFlushingQueue.value = false;
+				}
+			}
+
+			// View email modal
+			async function viewEmail(logId) {
+				const formData = new URLSearchParams();
+				formData.append('action', 'og_wp_view_email');
+				formData.append('og_wp_nonce', '<?php echo wp_create_nonce( 'og_wp_admin_ajax' ); ?>');
+				formData.append('log_id', logId);
+
+				try {
+					const res = await fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
+						method: 'POST',
+						body: formData
+					});
+					const data = await res.json();
+					if (data.success) {
+						emailModal.value = { visible: true, view: 'html', data: data.data };
+					} else {
+						alert('Could not load email details.');
+					}
+				} catch (e) {
+					alert('Error loading email: ' + e.message);
+				}
+			}
+
+			// Resend email
+			async function resendEmail(logId) {
+				if (!confirm('Re-dispatch this email transmission?')) return;
+				const formData = new URLSearchParams();
+				formData.append('action', 'og_wp_resend_email');
+				formData.append('og_wp_nonce', '<?php echo wp_create_nonce( 'og_wp_admin_ajax' ); ?>');
+				formData.append('log_id', logId);
+
+				try {
+					const res = await fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
+						method: 'POST',
+						body: formData
+					});
+					const data = await res.json();
+					if (data.success) {
+						showToast(data.data || 'Email re-queued for transmission!');
+					} else {
+						alert(data.data || 'Failed to resend');
+					}
+				} catch (e) {
+					alert('Error: ' + e.message);
+				}
+			}
+
+			// Clear all email logs
+			async function clearEmailLogs() {
+				if (!confirm('Permanently clear all email delivery logs?')) return;
+				const formData = new URLSearchParams();
+				formData.append('action', 'og_wp_clear_email_logs');
+				formData.append('og_wp_nonce', '<?php echo wp_create_nonce( 'og_wp_admin_ajax' ); ?>');
+
+				try {
+					const res = await fetch('<?php echo admin_url( 'admin-ajax.php' ); ?>', {
+						method: 'POST',
+						body: formData
+					});
+					const data = await res.json();
+					if (data.success) {
+						showToast('Logs cleared!');
+						setTimeout(() => window.location.reload(), 800);
+					}
+				} catch (e) {
+					alert('Error: ' + e.message);
+				}
+			}
+
+			return {
+				activeTab,
+				options,
+				openConfigs,
+				toggleConfig,
+				matchesModule,
+				moduleSearch,
+				activeSecurityCount,
+				securityScore,
+				scoreColor,
+				strokeDasharray,
+				saveAllSettings,
+				isSaving,
+				scanner,
+				runMalwareScan,
+				exportSecrets,
+				exportUrl,
+				handleImportSettings,
+				isImporting,
+				testEmailAddress,
+				sendTestEmail,
+				isSendingTest,
+				testResult,
+				dnsDomain,
+				verifyDns,
+				isVerifyingDns,
+				dnsResults,
+				emailQueueCount,
+				flushEmailQueue,
+				isFlushingQueue,
+				viewEmail,
+				resendEmail,
+				clearEmailLogs,
+				emailModal,
+				toast
+			};
 		}
-	}
-});
+	}).mount('#og-wp-app');
+})();
 </script>

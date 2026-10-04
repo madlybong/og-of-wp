@@ -9,3 +9,12 @@
 - The testing environment lives inside the `wordpress/` directory.
 - **DO NOT** create symlinks. We use a "Proxy Loader" pattern. The file `wordpress/wp-content/plugins/og-of-wp.php` dynamically `require_once`s the root plugin file.
 - **NEVER** modify files inside the `wordpress/` directory except the proxy loader. All plugin development must happen in the root repository.
+
+## Frontend UI / Dashboard Architecture
+- The plugin dashboard settings page is built using a **Buildless Vue 3 + Tailwind CSS Single Page Application (SPA)**.
+- It resides in `admin/views/admin-display.php` and dynamically hooks into PHP logic.
+- **CRITICAL**: Do NOT revert to standard HTML/PHP form submissions or full-page reloads. All settings must be saved via the AJAX handler `ajax_save_all_settings` using FormData.
+- Local assets (`vue.global.prod.js` and `tailwindcss.js`) are used to maintain 100% offline functionality. Do not use external CDNs.
+
+## Updates & Releases
+- We use a custom transient-based GitHub Auto-Updater (`includes/class-og-wp-updater.php`) instead of external libraries like plugin-update-checker. Do not add Composer or third-party updaters.

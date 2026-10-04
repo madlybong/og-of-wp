@@ -67,10 +67,7 @@ class OG_WP_Audit {
 	}
 
 	public function create_table() {
-		$transient_key = 'og_wp_audit_table_check';
-		if ( get_transient( $transient_key ) ) {
-			return;
-		}
+		
 
 		global $wpdb;
 		$charset_collate = $wpdb->get_charset_collate();
@@ -88,7 +85,7 @@ class OG_WP_Audit {
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
 
-		set_transient( $transient_key, true, WEEK_IN_SECONDS );
+		
 	}
 
 	private function get_ip() {
@@ -148,3 +145,5 @@ class OG_WP_Audit {
 		$this->insert_log( $action, $details );
 	}
 }
+
+

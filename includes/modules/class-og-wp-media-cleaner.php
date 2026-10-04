@@ -155,6 +155,7 @@ class OG_WP_Media_Cleaner {
 	}
 
 	public function ajax_scan_media() {
+		check_ajax_referer('og_wp_admin_ajax', 'og_wp_nonce');
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( 'Unauthorized' );
 		}
@@ -179,6 +180,7 @@ class OG_WP_Media_Cleaner {
 	}
 
 	public function ajax_clean_media() {
+		check_ajax_referer('og_wp_admin_ajax', 'og_wp_nonce');
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( 'Unauthorized' );
 		}
@@ -234,3 +236,4 @@ class OG_WP_Media_Cleaner {
 		) );
 	}
 }
+

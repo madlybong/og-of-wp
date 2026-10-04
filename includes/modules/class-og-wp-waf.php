@@ -14,12 +14,11 @@ class OG_WP_WAF {
 	}
 
 	public function run_waf_checks() {
-		// Only skip WAF if the user is authenticated as an admin (which is hard to check at plugins_loaded reliably without breaking login)
-		// Since we are at plugins_loaded (priority 1), wp_get_current_user is NOT available yet.
-		// So we cannot easily skip for admins here unless we check cookies manually, which is brittle.
-		// For a secure WAF, we DO NOT skip checks just because it's an admin dashboard request.
-		// However, we must ensure we don't break expected admin functionality like saving HTML.
-		// We will rely on our check methods to avoid blocking legitimate admin traffic (e.g. SQLi check should exclude known safe admin POST fields if needed, or we just rely on robust patterns).
+		$ip = $_SERVER['REMOTE_ADDR'] ?? '';
+		$blocklist = array_map('trim', explode(',', $this->options['waf_block_ip_list'] ?? ''));
+		if (in_array($ip, $blocklist) && !empty($ip)) {
+			$this->block_request('IP in Blocklist');
+		}
 
 		$this->check_directory_traversal();
 		$this->check_sql_injection();
@@ -34,8 +33,8 @@ class OG_WP_WAF {
 		}
 		
 		// If option is set for admin allowlist
-		if ( ! empty( $this->options['admin_ip_allowlist'] ) ) {
-			$allowed_ips = array_map( 'trim', explode( ',', $this->options['admin_ip_allowlist'] ) );
+		if ( ! empty( $this->options['waf_admin_ip_allowlist'] ) ) {
+			$allowed_ips = array_map( 'trim', explode( ',', $this->options['waf_admin_ip_allowlist'] ) );
 			$ip = $_SERVER['REMOTE_ADDR'] ?? '';
 			if ( ! in_array( $ip, $allowed_ips ) ) {
 				$this->block_request( 'Admin IP Not Allowlisted' );
@@ -48,7 +47,8 @@ class OG_WP_WAF {
 		do_action( 'og_wp_log_event', 'waf_block', $reason );
 		
 		status_header( 403 );
-		die( 'Forbidden: Request blocked by Astrake WP Secure WAF. Reason: ' . esc_html( $reason ) );
+		$msg = $this->options['waf_block_message'] ?? 'Forbidden';
+		die( esc_html( $msg ) . ' (' . esc_html( $reason ) . ')' );
 	}
 
 	private function check_directory_traversal() {
@@ -59,6 +59,7 @@ class OG_WP_WAF {
 	}
 
 	private function check_sql_injection() {
+		if ( empty( $this->options['waf_enable_sqli'] ) ) return;
 		$payloads = [
 			'UNION SELECT', 'UNION ALL SELECT', 'CONCAT(', 'CHR(',
 			'BASE64_DECODE(', 'INFORMATION_SCHEMA', 'DROP TABLE',
@@ -78,6 +79,7 @@ class OG_WP_WAF {
 	}
 
 	private function check_bad_bots() {
+		if ( empty( $this->options['waf_enable_bots'] ) ) return;
 		$user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
 		$bad_bots = [
 			'sqlmap', 'nmap', 'nikto', 'wpscan', 'dirbuster', 'zgrab',

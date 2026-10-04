@@ -19,26 +19,74 @@ class OG_WP_Settings {
 		);
 	}
 
-	public function register_settings() {
-		register_setting( 'og_wp_option_group', $this->option_name, array( $this, 'sanitize' ) );
+	public function __construct() {
+		add_action( 'wp_ajax_og_wp_export_settings', array( $this, 'ajax_export_settings' ) );
+		add_action( 'wp_ajax_og_wp_import_settings', array( $this, 'ajax_import_settings' ) );
+		add_action( 'wp_ajax_og_wp_save_all_settings', array( $this, 'ajax_save_all_settings' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_styles' ) );
 	}
 
+	public function register_settings() {
+		register_setting( 'og_wp_option_group', $this->option_name, array( $this, 'sanitize' ) );
+	}
+
 	public function enqueue_admin_styles( $hook ) {
-		if ( $hook !== 'toplevel_page_' . $this->page_slug ) {
+		if ( empty( $_GET['page'] ) || $_GET['page'] !== $this->page_slug ) {
 			return;
 		}
+		wp_enqueue_script( 'og-wp-tailwind', OG_WP_PLUGIN_URL . 'admin/js/tailwindcss.js', array(), OG_WP_VERSION, false );
+		wp_enqueue_script( 'og-wp-vue', OG_WP_PLUGIN_URL . 'admin/js/vue.global.prod.js', array(), OG_WP_VERSION, false );
 		wp_enqueue_style( 'og-wp-admin-css', OG_WP_PLUGIN_URL . 'admin/css/og-wp-admin.css', array(), OG_WP_VERSION );
 		wp_enqueue_style( 'wp-color-picker' );
 		wp_enqueue_script( 'wp-color-picker' );
 	}
 
+	public function ajax_save_all_settings() {
+		check_ajax_referer( 'og_wp_admin_ajax', 'og_wp_nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Unauthorized' );
+		}
+		$raw = isset( $_POST['og_wp_options'] ) && is_array( $_POST['og_wp_options'] ) ? $_POST['og_wp_options'] : array();
+		$sanitized = $this->sanitize( $raw );
+		update_option( $this->option_name, $sanitized );
+		wp_send_json_success( array( 'message' => 'All settings saved successfully!' ) );
+	}
+
+		public function ajax_export_settings() {
+		if (!current_user_can('manage_options')) wp_die('Unauthorized');
+		$options = get_option($this->option_name, array());
+		if (empty($_GET['include_secrets'])) {
+			$secrets = ['email_smtp_password', 'email_resend_api_key', 'email_mailgun_api_key', 'email_sendgrid_api_key', 'auth_captcha_secret'];
+			foreach ($secrets as $s) unset($options[$s]);
+		}
+		header('Content-disposition: attachment; filename=og-wp-settings-' . date('Y-m-d') . '.json');
+		header('Content-type: application/json');
+		echo wp_json_encode($options);
+		exit;
+	}
+
+	public function ajax_import_settings() {
+		check_ajax_referer('og_wp_admin_ajax', 'og_wp_nonce');
+		if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+		if (empty($_FILES['settings_file']['tmp_name'])) wp_send_json_error('No file uploaded');
+		$content = file_get_contents($_FILES['settings_file']['tmp_name']);
+		$data = json_decode($content, true);
+		if (!is_array($data)) wp_send_json_error('Invalid JSON file');
+		
+		$current = get_option($this->option_name, array());
+		$merged = array_merge($current, $data);
+		update_option($this->option_name, $merged);
+		wp_send_json_success('Settings imported successfully.');
+	}
+
 	public function sanitize( $input ) {
+		$existing = get_option( $this->option_name, array() );
+		if ( ! is_array( $existing ) ) $existing = array();
 		if ( ! is_array( $input ) ) {
 			return array();
 		}
 		
-		$sanitized_input = array();
+		$sanitized_input = $existing;
 		foreach ( $input as $key => $value ) {
 			if ( $key === 'email_routing_rules' && is_array( $value ) ) {
 				$sanitized_rules = array();
@@ -122,13 +170,13 @@ class OG_WP_Settings {
 		</div>
 		<div class="og-wp-form-row">
 			<label>
-				<input type="checkbox" name="og_wp_options[auth_enable_captcha]" value="1" <?php checked($captcha, '1'); ?>>
+				<input type="hidden" name="og_wp_options[auth_enable_captcha]" value="0"><input type="checkbox" name="og_wp_options[auth_enable_captcha]" value="1" <?php checked($captcha, '1'); ?>>
 				Enable Math CAPTCHA on Login
 			</label>
 		</div>
 		<div class="og-wp-form-row">
 			<label>
-				<input type="checkbox" name="og_wp_options[auth_enable_2fa]" value="1" <?php checked($twofa, '1'); ?>>
+				<input type="hidden" name="og_wp_options[auth_enable_2fa]" value="0"><input type="checkbox" name="og_wp_options[auth_enable_2fa]" value="1" <?php checked($twofa, '1'); ?>>
 				Enable Email 2FA for all users
 			</label>
 		</div>
@@ -157,8 +205,8 @@ class OG_WP_Settings {
 			<input type="text" name="og_wp_options[waf_block_message]" value="<?php echo esc_attr($msg); ?>">
 		</div>
 		<div class="og-wp-form-row">
-			<label><input type="checkbox" name="og_wp_options[waf_enable_sqli]" value="1" <?php checked($sqli, '1'); ?>> Enable SQL Injection Protection</label><br>
-			<label><input type="checkbox" name="og_wp_options[waf_enable_bots]" value="1" <?php checked($bots, '1'); ?>> Enable Bad Bot Blocking</label>
+			<label><input type="hidden" name="og_wp_options[waf_enable_sqli]" value="0"><input type="checkbox" name="og_wp_options[waf_enable_sqli]" value="1" <?php checked($sqli, '1'); ?>> Enable SQL Injection Protection</label><br>
+			<label><input type="hidden" name="og_wp_options[waf_enable_bots]" value="0"><input type="checkbox" name="og_wp_options[waf_enable_bots]" value="1" <?php checked($bots, '1'); ?>> Enable Bad Bot Blocking</label>
 		</div>
 		<?php
 	}
@@ -169,9 +217,9 @@ class OG_WP_Settings {
 		$editor = isset($options['files_disable_editor']) ? $options['files_disable_editor'] : '1';
 		?>
 		<div class="og-wp-form-row">
-			<label><input type="checkbox" name="og_wp_options[files_block_php]" value="1" <?php checked($php, '1'); ?>> Block PHP execution in Uploads folder</label><br>
-			<label><input type="checkbox" name="og_wp_options[files_enable_hotlink]" value="1" <?php checked($hotlink, '1'); ?>> Enable Image Hotlink Protection</label><br>
-			<label><input type="checkbox" name="og_wp_options[files_disable_editor]" value="1" <?php checked($editor, '1'); ?>> Disable Plugin/Theme Editor</label>
+			<label><input type="hidden" name="og_wp_options[files_block_php]" value="0"><input type="checkbox" name="og_wp_options[files_block_php]" value="1" <?php checked($php, '1'); ?>> Block PHP execution in Uploads folder</label><br>
+			<label><input type="hidden" name="og_wp_options[files_enable_hotlink]" value="0"><input type="checkbox" name="og_wp_options[files_enable_hotlink]" value="1" <?php checked($hotlink, '1'); ?>> Enable Image Hotlink Protection</label><br>
+			<label><input type="hidden" name="og_wp_options[files_disable_editor]" value="0"><input type="checkbox" name="og_wp_options[files_disable_editor]" value="1" <?php checked($editor, '1'); ?>> Disable Plugin/Theme Editor</label>
 		</div>
 		<?php
 	}
@@ -196,7 +244,7 @@ class OG_WP_Settings {
 			</select>
 		</div>
 		<div class="og-wp-form-row">
-			<label><input type="checkbox" name="og_wp_options[scanner_email_alerts]" value="1" <?php checked($email, '1'); ?>> Email me when a threat is found</label>
+			<label><input type="hidden" name="og_wp_options[scanner_email_alerts]" value="0"><input type="checkbox" name="og_wp_options[scanner_email_alerts]" value="1" <?php checked($email, '1'); ?>> Email me when a threat is found</label>
 		</div>
 		<?php
 	}
@@ -216,8 +264,8 @@ class OG_WP_Settings {
 			<textarea name="og_wp_options[spam_custom_keywords]" placeholder="Comma-separated keywords"><?php echo esc_textarea($keywords); ?></textarea>
 		</div>
 		<div class="og-wp-form-row">
-			<label><input type="checkbox" name="og_wp_options[spam_enable_honeypot]" value="1" <?php checked($honeypot, '1'); ?>> Enable Comment Form Honeypot</label><br>
-			<label><input type="checkbox" name="og_wp_options[spam_block_disposable]" value="1" <?php checked($disposable, '1'); ?>> Block Disposable Email Registrations</label>
+			<label><input type="hidden" name="og_wp_options[spam_enable_honeypot]" value="0"><input type="checkbox" name="og_wp_options[spam_enable_honeypot]" value="1" <?php checked($honeypot, '1'); ?>> Enable Comment Form Honeypot</label><br>
+			<label><input type="hidden" name="og_wp_options[spam_block_disposable]" value="0"><input type="checkbox" name="og_wp_options[spam_block_disposable]" value="1" <?php checked($disposable, '1'); ?>> Block Disposable Email Registrations</label>
 		</div>
 		<?php
 	}
@@ -248,7 +296,7 @@ class OG_WP_Settings {
 			<textarea name="og_wp_options[headers_csp]"><?php echo esc_textarea($csp); ?></textarea>
 		</div>
 		<div class="og-wp-form-row">
-			<label><input type="checkbox" name="og_wp_options[headers_enable_hsts]" value="1" <?php checked($hsts, '1'); ?>> Enable HSTS (Strict-Transport-Security)</label>
+			<label><input type="hidden" name="og_wp_options[headers_enable_hsts]" value="0"><input type="checkbox" name="og_wp_options[headers_enable_hsts]" value="1" <?php checked($hsts, '1'); ?>> Enable HSTS (Strict-Transport-Security)</label>
 		</div>
 		<div class="og-wp-form-row">
 			<label>HSTS Max-Age (Days)</label>
@@ -275,9 +323,9 @@ class OG_WP_Settings {
 		$days = $options['ssl_alert_days'] ?? '14';
 		?>
 		<div class="og-wp-form-row">
-			<label><input type="checkbox" name="og_wp_options[ssl_force_https]" value="1" <?php checked($force, '1'); ?>> Force HTTPS (301 Redirect)</label><br>
-			<label><input type="checkbox" name="og_wp_options[ssl_fix_mixed]" value="1" <?php checked($mixed, '1'); ?>> Auto-Fix Mixed Content on the fly</label><br>
-			<label><input type="checkbox" name="og_wp_options[ssl_cert_alerts]" value="1" <?php checked($alerts, '1'); ?>> Send SSL Expiry Alerts</label>
+			<label><input type="hidden" name="og_wp_options[ssl_force_https]" value="0"><input type="checkbox" name="og_wp_options[ssl_force_https]" value="1" <?php checked($force, '1'); ?>> Force HTTPS (301 Redirect)</label><br>
+			<label><input type="hidden" name="og_wp_options[ssl_fix_mixed]" value="0"><input type="checkbox" name="og_wp_options[ssl_fix_mixed]" value="1" <?php checked($mixed, '1'); ?>> Auto-Fix Mixed Content on the fly</label><br>
+			<label><input type="hidden" name="og_wp_options[ssl_cert_alerts]" value="0"><input type="checkbox" name="og_wp_options[ssl_cert_alerts]" value="1" <?php checked($alerts, '1'); ?>> Send SSL Expiry Alerts</label>
 		</div>
 		<div class="og-wp-form-row">
 			<label>Alert Days Before Expiry</label>
@@ -291,8 +339,8 @@ class OG_WP_Settings {
 		$prefix = isset($options['db_alert_prefix']) ? $options['db_alert_prefix'] : '1';
 		?>
 		<div class="og-wp-form-row">
-			<label><input type="checkbox" name="og_wp_options[db_suppress_errors]" value="1" <?php checked($suppress, '1'); ?>> Suppress DB Errors from public</label><br>
-			<label><input type="checkbox" name="og_wp_options[db_alert_prefix]" value="1" <?php checked($prefix, '1'); ?>> Alert if default "wp_" prefix is used</label>
+			<label><input type="hidden" name="og_wp_options[db_suppress_errors]" value="0"><input type="checkbox" name="og_wp_options[db_suppress_errors]" value="1" <?php checked($suppress, '1'); ?>> Suppress DB Errors from public</label><br>
+			<label><input type="hidden" name="og_wp_options[db_alert_prefix]" value="0"><input type="checkbox" name="og_wp_options[db_alert_prefix]" value="1" <?php checked($prefix, '1'); ?>> Alert if default "wp_" prefix is used</label>
 		</div>
 		<?php
 	}
@@ -303,7 +351,7 @@ class OG_WP_Settings {
 		$roles = $options['user_block_admin_roles'] ?? array('subscriber', 'contributor');
 		?>
 		<div class="og-wp-form-row">
-			<label><input type="checkbox" name="og_wp_options[user_block_enum]" value="1" <?php checked($enum, '1'); ?>> Block Username Enumeration</label>
+			<label><input type="hidden" name="og_wp_options[user_block_enum]" value="0"><input type="checkbox" name="og_wp_options[user_block_enum]" value="1" <?php checked($enum, '1'); ?>> Block Username Enumeration</label>
 		</div>
 		<div class="og-wp-form-row">
 			<label>Restrict REST API</label>
@@ -328,10 +376,10 @@ class OG_WP_Settings {
 		$author = isset($options['hardening_strip_author']) ? $options['hardening_strip_author'] : '1';
 		?>
 		<div class="og-wp-form-row">
-			<label><input type="checkbox" name="og_wp_options[hardening_hide_version]" value="1" <?php checked($version, '1'); ?>> Hide WP Version</label><br>
-			<label><input type="checkbox" name="og_wp_options[hardening_disable_pingbacks]" value="1" <?php checked($pingbacks, '1'); ?>> Disable Pingbacks</label><br>
-			<label><input type="checkbox" name="og_wp_options[hardening_strip_author]" value="1" <?php checked($author, '1'); ?>> Strip Comment Author URLs</label><br>
-			<label><input type="checkbox" name="og_wp_options[hardening_disable_cron]" value="1" <?php checked($cron, '1'); ?>> Disable WP Cron via HTTP (requires server cron)</label>
+			<label><input type="hidden" name="og_wp_options[hardening_hide_version]" value="0"><input type="checkbox" name="og_wp_options[hardening_hide_version]" value="1" <?php checked($version, '1'); ?>> Hide WP Version</label><br>
+			<label><input type="hidden" name="og_wp_options[hardening_disable_pingbacks]" value="0"><input type="checkbox" name="og_wp_options[hardening_disable_pingbacks]" value="1" <?php checked($pingbacks, '1'); ?>> Disable Pingbacks</label><br>
+			<label><input type="hidden" name="og_wp_options[hardening_strip_author]" value="0"><input type="checkbox" name="og_wp_options[hardening_strip_author]" value="1" <?php checked($author, '1'); ?>> Strip Comment Author URLs</label><br>
+			<label><input type="hidden" name="og_wp_options[hardening_disable_cron]" value="0"><input type="checkbox" name="og_wp_options[hardening_disable_cron]" value="1" <?php checked($cron, '1'); ?>> Disable WP Cron via HTTP (requires server cron)</label>
 		</div>
 		<?php
 	}
@@ -469,7 +517,7 @@ class OG_WP_Settings {
 				<label>From Email Address</label>
 				<input type="text" name="og_wp_options[email_from_email]" id="og_wp_from_email" value="<?php echo esc_attr( $from_email ); ?>" placeholder="e.g. notifications@yourdomain.com">
 				<label style="margin-top:5px; font-weight:normal;">
-					<input type="checkbox" name="og_wp_options[email_force_from_email]" value="1" <?php checked( $force_from ); ?>>
+					<input type="hidden" name="og_wp_options[email_force_from_email]" value="0"><input type="checkbox" name="og_wp_options[email_force_from_email]" value="1" <?php checked( $force_from ); ?>>
 					<strong>Force From Email</strong> (Prevents 3rd-party plugins from using unauthorized addresses that trigger DMARC drops)
 				</label>
 			</div>
@@ -477,7 +525,7 @@ class OG_WP_Settings {
 				<label>From Name</label>
 				<input type="text" name="og_wp_options[email_from_name]" value="<?php echo esc_attr( $from_name ); ?>" placeholder="e.g. Astrake Sovereign Mail">
 				<label style="margin-top:5px; font-weight:normal;">
-					<input type="checkbox" name="og_wp_options[email_force_from_name]" value="1" <?php checked( $force_name ); ?>>
+					<input type="hidden" name="og_wp_options[email_force_from_name]" value="0"><input type="checkbox" name="og_wp_options[email_force_from_name]" value="1" <?php checked( $force_name ); ?>>
 					<strong>Force From Name</strong> (Enforces consistent brand identity across all notifications)
 				</label>
 			</div>
@@ -488,21 +536,21 @@ class OG_WP_Settings {
 			<h4 style="margin:0 0 10px 0; font-size:15px; color:var(--og-wp-navy);">High-Performance Queue & Open Tracking</h4>
 			<div class="og-wp-form-row">
 				<label style="font-weight:normal;">
-					<input type="checkbox" name="og_wp_options[email_async_queue]" value="1" <?php checked( $async ); ?>>
+					<input type="hidden" name="og_wp_options[email_async_queue]" value="0"><input type="checkbox" name="og_wp_options[email_async_queue]" value="1" <?php checked( $async ); ?>>
 					<strong>Enable Non-Blocking Asynchronous Queue</strong>
 				</label>
 				<span class="og-wp-form-help">Offloads SMTP/API delivery to a background worker. Speeds up WooCommerce checkout, user registrations, and form submissions to 0ms email wait times!</span>
 			</div>
 			<div class="og-wp-form-row">
 				<label style="font-weight:normal;">
-					<input type="checkbox" name="og_wp_options[email_track_opens]" value="1" <?php checked( ! empty( $options['email_track_opens'] ) ); ?>>
+					<input type="hidden" name="og_wp_options[email_track_opens]" value="0"><input type="checkbox" name="og_wp_options[email_track_opens]" value="1" <?php checked( ! empty( $options['email_track_opens'] ) ); ?>>
 					<strong>Enable Invisible Email Open Tracking</strong>
 				</label>
 				<span class="og-wp-form-help">Injects a lightweight 1x1 transparent tracking pixel into outgoing HTML emails to accurately track when recipients open emails in real-time.</span>
 			</div>
 			<div class="og-wp-form-row">
 				<label>Provider Delivery Webhook Endpoint</label>
-				<input type="text" readonly value="<?php echo esc_url( get_rest_url( null, 'og-wp/v1/email-webhook' ) ); ?>" onclick="this.select()" style="max-width:500px; background:#f1f5f9; font-family:monospace; font-size:12px;">
+				<input type="text" readonly value="<?php echo esc_url( get_rest_url( null, 'og-wp/v1/email-webhook' ) . '?token=' . (get_option('og_wp_webhook_token') ?: update_option('og_wp_webhook_token', wp_generate_password(24, false)) ?: get_option('og_wp_webhook_token')) ); ?>" onclick="this.select()" style="max-width:500px; background:#f1f5f9; font-family:monospace; font-size:12px;">
 				<span class="og-wp-form-help">Copy and paste this webhook URL into your Resend, SendGrid, or Mailgun account to automatically receive delivery confirmations, open events, and bounce drops.</span>
 			</div>
 			<div class="og-wp-form-row">
@@ -540,7 +588,7 @@ class OG_WP_Settings {
 			</div>
 			<div class="og-wp-form-row">
 				<label>
-					<input type="checkbox" name="og_wp_options[smtp_auth]" value="1" <?php checked( $smtp_auth, '1' ); ?>>
+					<input type="hidden" name="og_wp_options[smtp_auth]" value="0"><input type="checkbox" name="og_wp_options[smtp_auth]" value="1" <?php checked( $smtp_auth, '1' ); ?>>
 					SMTP Authentication Required
 				</label>
 			</div>

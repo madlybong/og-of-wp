@@ -35,7 +35,7 @@ class OG_WP_Porter {
 		<div class="og-wp-form-row">
 			<label>Export Metadata</label>
 			<label class="og-wp-switch">
-				<input type="checkbox" name="og_wp_options[porter_include_meta]" value="1" <?php checked( $include_meta, '1' ); ?> />
+				<input type="hidden" name="og_wp_options[porter_include_meta]" value="0"><input type="checkbox" name="og_wp_options[porter_include_meta]" value="1" <?php checked( $include_meta, '1' ); ?> />
 				<span class="og-wp-slider"></span>
 			</label>
 			<p class="description">Include custom fields and post meta in the export file.</p>
@@ -44,7 +44,7 @@ class OG_WP_Porter {
 		<div class="og-wp-form-row">
 			<label>Re-download Featured Image on Import</label>
 			<label class="og-wp-switch">
-				<input type="checkbox" name="og_wp_options[porter_import_image]" value="1" <?php checked( $import_image, '1' ); ?> />
+				<input type="hidden" name="og_wp_options[porter_import_image]" value="0"><input type="checkbox" name="og_wp_options[porter_import_image]" value="1" <?php checked( $import_image, '1' ); ?> />
 				<span class="og-wp-slider"></span>
 			</label>
 			<p class="description">If enabled, attempts to fetch and import the featured image from the original URL during import.</p>
@@ -209,3 +209,4 @@ class OG_WP_Porter {
 		}
 	}
 }
+

@@ -19,12 +19,22 @@ class OG_WP_Scanner {
 	}
 
 	public function ajax_run_scan() {
+		check_ajax_referer('og_wp_admin_ajax', 'og_wp_nonce');
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( 'Unauthorized' );
 		}
 		
-		$this->run_scan();
-		wp_send_json_success( 'Scan complete. Check the Audit Log for details.' );
+		@set_time_limit( 300 );
+		$core_altered = $this->scan_core_files();
+		$malware_found = $this->scan_for_malware();
+
+		if ( $core_altered || $malware_found ) {
+			do_action( 'og_wp_log_event', 'scan_alert', 'Suspicious files detected during scan.' );
+			wp_send_json_success( 'Scan complete: Potential anomalies detected. Check Audit Log.' );
+		} else {
+			do_action( 'og_wp_log_event', 'scan_clean', 'Malware scan completed. No threats found.' );
+			wp_send_json_success( 'Scan complete: Core integrity verified, 0 threats detected.' );
+		}
 	}
 
 	public function run_scan() {
@@ -41,6 +51,7 @@ class OG_WP_Scanner {
 
 	private function scan_core_files() {
 		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/update.php';
 		
 		$wp_version = get_bloginfo( 'version' );
 		$locale = get_locale();
@@ -91,7 +102,9 @@ class OG_WP_Scanner {
 
 		$directories_to_scan = [ $active_theme ];
 		foreach ( $active_plugins as $plugin ) {
-			$directories_to_scan[] = dirname( $plugins_dir . '/' . $plugin );
+			$plugin_dir = dirname( $plugins_dir . '/' . $plugin );
+			if ($plugin_dir === $plugins_dir || $plugin_dir === $plugins_dir . '/') { $plugin_dir = $plugins_dir . '/' . $plugin; if (is_file($plugin_dir)) { /* scan single file or just skip to avoid scanning all plugins */ continue; } }
+			$directories_to_scan[] = $plugin_dir;
 		}
 
 		foreach ( $directories_to_scan as $dir ) {
@@ -120,3 +133,6 @@ class OG_WP_Scanner {
 		return false;
 	}
 }
+
+
+

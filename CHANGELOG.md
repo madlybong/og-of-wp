@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-10-04
+
+### Added
+- **Native Auto-Updater**: Built a lightweight, zero-dependency WordPress auto-updater that hooks into WordPress's native transient system to securely fetch and install updates directly from GitHub Releases.
+- **Vue 3 UI Overhaul**: Replaced the legacy PHP/HTML settings page with a modern, reactive, buildless **Vue 3 + Tailwind CSS** Single Page Application (SPA). Ensured seamless offline local support and AJAX-based saving without page reloads.
+- **Contact Form 7 Integration**: Added native Contact Form 7 integration, enabling a robust local database capture system for form submissions and easy toggle controls in settings.
+- **Settings JSON Porter**: Re-introduced and improved the JSON Import/Export capability (Porter module) for effortlessly migrating plugin settings across environments.
+- **GitHub Release Automation Support**: Automated version tagging and GitHub Action release pipelines are now natively integrated to feed the new updater.
+
+### Fixed
+- **Scanner Reliability**: Resolved PHP execution timeouts during local and cloud-based website scans by dynamically enforcing execution limits and forcing correct AJAX registration.
+- **Local Dev URLs**: Fixed local proxy URL resolution bugs (`plugins_url()`) that broke asset paths when loaded from outside the standard `wp-content/plugins` directory.
+- **CLI Enhancements**: Fixed automatic executable path detection (MySQL, 7-Zip) and improved environmental prompt handling to cleanly support CI pipelines.
+
 ## [1.0.1] - 2026-10-03
 
 ### Added
@@ -14,7 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - High-availability Automated Failover Matrix (Primary API -> Backup SMTP).
   - Pure PHP Amazon SES integration via AWS SigV4 (no SDK bloat).
   - Deliverability Health Scorecard with live DNS SPF/DMARC checks.
-- **Unified Ecosystem Testing**: Added a self-contained local testing architecture using a proxy loader pattern and Bun sync scripts to synchronize releases seamlessly.
+- **Unified Ecosystem Testing & CLI Enterprise Refactor**:
+  - Added a self-contained local testing architecture using a proxy loader pattern and Bun sync scripts to synchronize releases seamlessly.
+  - **Memory Safety & Schema Conflicts**: Re-engineered SQL search-and-replace to use line-by-line asynchronous stream processing (`readline`), eliminating OOM crashes on large database dumps (>1GB). Also injected dynamic `DROP TABLE IF EXISTS` operations for every `CREATE TABLE` to reliably fix `ERROR 1050 (42S01)` import conflicts during `db:pull`.
+  - **Context-Aware Prompting**: Isolated environment loading (`getLocalEnv` vs `getProdEnv`), eliminating redundant production credential prompts during local commands like `backup` and `db:pull`.
+  - **Password Confirmation**: Added validation and confirmation loops for sensitive inputs to prevent lockout from accidental typos.
+  - **Side-by-Side Exports**: Separated SQL database dump from the WordPress ZIP archive so both files output side-by-side in the working directory ready for File Manager and phpMyAdmin.
+  - **Offline Security**: Replaced external WordPress.org salt API HTTP calls with zero-dependency native `crypto.randomBytes` salt generation.
+  - **Dynamic White-Labeling**: Decoupled legacy hardcoded project names, establishing dynamic `PROJECT_SLUG` branding across all commands.
 
 ## [1.0.0] - 2026-10-03
 

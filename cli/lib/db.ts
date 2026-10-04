@@ -1,9 +1,11 @@
 import { spawn } from "bun";
-import { readFileSync, writeFileSync } from "fs";
-import { EnvConfig } from "./env";
+import { createReadStream, createWriteStream } from "fs";
+import { rename, appendFile } from "fs/promises";
+import { createInterface } from "readline";
+import { LocalEnvConfig, EnvConfig } from "./env";
 import { log } from "./logger";
 
-export async function exportDb(config: EnvConfig, outputPath: string): Promise<string> {
+export async function exportDb(config: LocalEnvConfig | EnvConfig, outputPath: string): Promise<string> {
     const args = [
         config.MYSQLDUMP_PATH,
         "-u", config.LOCAL_DB_USER,
@@ -24,7 +26,7 @@ export async function exportDb(config: EnvConfig, outputPath: string): Promise<s
     return outputPath;
 }
 
-export async function importDb(config: EnvConfig, sqlPath: string): Promise<void> {
+export async function importDb(config: LocalEnvConfig | EnvConfig, sqlPath: string): Promise<void> {
     const args = [
         config.MYSQL_PATH,
         "-u", config.LOCAL_DB_USER,
@@ -43,22 +45,44 @@ export async function importDb(config: EnvConfig, sqlPath: string): Promise<void
     }
 }
 
-export function searchReplaceSQL(filePath: string, from: string, to: string) {
-    let sql = readFileSync(filePath, "utf-8");
-    
-    // Pass 1: Replace serialized strings
+export async function searchReplaceSQL(filePath: string, from: string, to: string): Promise<void> {
+    const tempPath = `${filePath}.tmp-${Date.now()}`;
+    const readStream = createReadStream(filePath, { encoding: "utf-8" });
+    const writeStream = createWriteStream(tempPath, { encoding: "utf-8" });
+
+    const rl = createInterface({
+        input: readStream,
+        crlfDelay: Infinity
+    });
+
     const regex = new RegExp(`s:\\d+:"${from.replace(/[.*+?^$\\{}()|[\\]\\\\]/g, '\\$&')}"`, "g");
     const toLength = Buffer.byteLength(to, 'utf8');
     const toStr = `s:${toLength}:"${to}"`;
-    sql = sql.replace(regex, toStr);
 
-    // Pass 2: Replace all other plain occurrences
-    sql = sql.split(from).join(to);
-    
-    writeFileSync(filePath, sql, "utf-8");
+    for await (const line of rl) {
+        // Detect CREATE TABLE and inject DROP TABLE IF EXISTS to prevent import conflicts
+        const createTableMatch = line.match(/^CREATE TABLE (?:IF NOT EXISTS )?`([^`]+)`/i);
+        if (createTableMatch) {
+            writeStream.write(`DROP TABLE IF EXISTS \`${createTableMatch[1]}\`;\n`);
+        }
+
+        // Pass 1: Replace serialized strings
+        let processed = line.replace(regex, toStr);
+        // Pass 2: Replace all other plain occurrences
+        processed = processed.split(from).join(to);
+
+        writeStream.write(processed + "\n");
+    }
+
+    await new Promise<void>((resolve, reject) => {
+        writeStream.end(() => resolve());
+        writeStream.on("error", reject);
+    });
+
+    await rename(tempPath, filePath);
 }
 
-export function hardenAdminCredentialsSQL(filePath: string, config: EnvConfig) {
+export async function hardenAdminCredentialsSQL(filePath: string, config: Partial<EnvConfig>): Promise<void> {
     const { PROD_WP_ADMIN_USER, PROD_WP_ADMIN_PASS, PROD_WP_ADMIN_EMAIL, WP_TABLE_PREFIX } = config;
     
     if (!PROD_WP_ADMIN_USER || !PROD_WP_ADMIN_PASS) {
@@ -70,13 +94,12 @@ export function hardenAdminCredentialsSQL(filePath: string, config: EnvConfig) {
 
     const sqlAppend = `\n
 -- Secure Admin Credentials Injection
-UPDATE \`${WP_TABLE_PREFIX}users\` 
+UPDATE \`${WP_TABLE_PREFIX || 'wp_'}users\` 
 SET \`user_login\` = '${PROD_WP_ADMIN_USER}', 
     \`user_pass\` = MD5('${PROD_WP_ADMIN_PASS}')${emailUpdate}
 WHERE \`user_login\` = 'admin' OR \`ID\` = 1;
 `;
 
     log.info(`Hardening admin credentials in ${filePath}...`);
-    const fs = require("fs");
-    fs.appendFileSync(filePath, sqlAppend);
+    await appendFile(filePath, sqlAppend, "utf-8");
 }
