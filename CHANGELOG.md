@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-10-05
+
+### Added
+- **The Ecosystem Bootstrapper (`init`)**: Added a massive new `bunx github:madlybong/og-of-wp init` command to the CLI. It interactively downloads the latest WordPress core, auto-creates the MySQL database, generates secure offline `wp-config.php` salts, and injects our custom AI-compliant ecosystem boilerplate from scratch.
+- **OG Starter Theme Boilerplate**: Introduced an anti-bloat, Gutenberg-first theme scaffold (`cli/scaffolds/og-starter-theme`). It natively registers `add_meta_box` inputs for universal web requirements (Hero Banners, CTAs) to strictly eliminate the need for heavy third-party plugins like Advanced Custom Fields (ACF). Includes embedded `agents.md` and `llms.txt` files for AI coding standard compliance.
+- **Native MVSEO Module**: Built a Minimum Viable SEO engine directly into the `og-of-wp` master plugin. Bypassing bloated SEO plugins, it natively injects custom Title Overrides, Meta Descriptions, OpenGraph tags, and Twitter Cards into `wp_head` while seamlessly complementing WordPress 5.5+ native XML sitemaps. Fully controllable via the Vue 3 dashboard.
+- **Universal AI Context Standards**: Consolidated proprietary IDE context rules into a universal `agents.md` repository root file to ensure AI agents (Copilot, Gemini, Cursor) uniformly respect the zero-bloat ecosystem standards.
+
 ## [1.0.2] - 2026-10-04
 
 ### Added

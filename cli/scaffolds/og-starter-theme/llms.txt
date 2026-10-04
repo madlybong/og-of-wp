@@ -1,0 +1,27 @@
+# OG Starter Theme: Architectural Context
+
+This document provides high-level architectural context for Large Language Models generating code for this repository.
+
+## Overview
+- **Type:** Minimalist WordPress Starter Theme
+- **Target:** Generic websites (Business, Personal, Landing Pages). NOT e-commerce.
+- **Philosophy:** Zero-bloat, relying entirely on native WordPress APIs.
+
+## Data Structures
+The theme natively handles the following meta keys on the `page` post type:
+- `_og_hero_title` (String): Main H1 override.
+- `_og_hero_subtitle` (String): Supporting paragraph text.
+- `_og_cta_text` (String): Button label.
+- `_og_cta_url` (String): Button destination.
+
+## SEO Integration
+SEO (Meta Descriptions, Titles, OpenGraph, Twitter Cards) is NOT handled by the theme. It is handled by the `og-of-wp` master plugin via the `Class_OG_WP_SEO` module.
+The plugin handles these meta keys:
+- `_og_wp_seo_title`
+- `_og_wp_seo_desc`
+- `_og_wp_seo_noindex`
+
+Do not attempt to duplicate SEO output in the theme's `header.php`.
+
+## Styling
+The theme uses a unified `theme.json` to configure the block editor. All custom CSS should be minimal and placed directly in `style.css` only when native block controls are insufficient.

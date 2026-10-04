@@ -88,6 +88,7 @@ class OG_WP {
 			'audit'     => 'class-og-wp-audit.php',
 			'ssl'       => 'class-og-wp-ssl.php',
 			'db'        => 'class-og-wp-db.php',
+			'seo'       => 'class-og-wp-seo.php',
 			'user'      => 'class-og-wp-user.php',
 			'hardening' => 'class-og-wp-hardening.php',
 			'duplicator'=> 'class-og-wp-duplicator.php',

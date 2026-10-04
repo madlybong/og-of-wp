@@ -23,6 +23,7 @@ $security_modules = [
 ];
 
 $utility_modules = [
+	'seo'           => [ 'title' => 'Native Minimum Viable SEO', 'desc' => 'Inject OpenGraph tags, Twitter cards, and allow custom meta titles/descriptions.' ],
 	'duplicator'    => [ 'title' => 'Post/Page Duplicator', 'desc' => 'One-click cloning of posts, pages, and custom post types with all metadata.' ],
 	'porter'        => [ 'title' => 'Content Porter (JSON)', 'desc' => 'Export and import structured content, taxonomies, and terms across sites.' ],
 	'media_cleaner' => [ 'title' => 'Media Gallery Cleaner', 'desc' => 'Identify orphaned, unattached, and unused image assets in your media library.' ],

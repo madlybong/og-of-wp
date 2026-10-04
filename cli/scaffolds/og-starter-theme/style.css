@@ -1,0 +1,15 @@
+/*
+Theme Name: OG Starter Theme
+Theme URI: https://zerosugar.co.in/
+Author: Zero Sugar
+Author URI: https://zerosugar.co.in/
+Description: A hyper-optimized, bloat-free starter theme for the OG WP ecosystem.
+Version: 1.0.0
+Text Domain: og-starter-theme
+*/
+
+/* Add any custom frontend CSS here. The theme relies mostly on theme.json and native blocks. */
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+}

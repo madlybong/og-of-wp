@@ -6,6 +6,9 @@ const args = process.argv.slice(3);
 
 async function main() {
     switch (command) {
+        case "init":
+            await (await import("./commands/init")).default(args);
+            break;
         case "package":
             await (await import("./commands/package")).default(args);
             break;
@@ -21,6 +24,7 @@ async function main() {
         default:
             log.info("Usage: og-deploy <command> [options]");
             log.info("Commands:");
+            log.info("  init     - Bootstraps a fresh WordPress ecosystem with the OG Starter Theme");
             log.info("  package  - Builds a ZIP for cPanel upload (includes DB & SMTP)");
             log.info("  db:push  - Exports local DB -> production-ready SQL");
             log.info("  db:pull  - Converts a provided prod SQL dump -> local-ready and imports");

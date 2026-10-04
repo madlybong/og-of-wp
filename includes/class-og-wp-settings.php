@@ -136,6 +136,7 @@ class OG_WP_Settings {
 		add_action( 'og_wp_module_settings_audit', array( $this, 'render_audit_settings' ) );
 		add_action( 'og_wp_module_settings_ssl', array( $this, 'render_ssl_settings' ) );
 		add_action( 'og_wp_module_settings_db', array( $this, 'render_db_settings' ) );
+		add_action( 'og_wp_module_settings_seo', array( $this, 'render_seo_settings' ) );
 		add_action( 'og_wp_module_settings_user', array( $this, 'render_user_settings' ) );
 		add_action( 'og_wp_module_settings_hardening', array( $this, 'render_hardening_settings' ) );
 		add_action( 'og_wp_module_settings_email', array( $this, 'render_email_settings' ) );
@@ -341,6 +342,16 @@ class OG_WP_Settings {
 		<div class="og-wp-form-row">
 			<label><input type="hidden" name="og_wp_options[db_suppress_errors]" value="0"><input type="checkbox" name="og_wp_options[db_suppress_errors]" value="1" <?php checked($suppress, '1'); ?>> Suppress DB Errors from public</label><br>
 			<label><input type="hidden" name="og_wp_options[db_alert_prefix]" value="0"><input type="checkbox" name="og_wp_options[db_alert_prefix]" value="1" <?php checked($prefix, '1'); ?>> Alert if default "wp_" prefix is used</label>
+		</div>
+		<?php
+	}
+
+	public function render_seo_settings( $options ) {
+		$seo_enabled = isset($options['enable_module_seo']) ? $options['enable_module_seo'] : '0';
+		?>
+		<div class="og-wp-form-row">
+			<label><input type="hidden" name="og_wp_options[enable_module_seo]" value="0"><input type="checkbox" name="og_wp_options[enable_module_seo]" value="1" <?php checked($seo_enabled, '1'); ?>> Enable Native MVSEO (Injects OpenGraph, custom titles, and meta descriptions)</label>
+			<p class="description">Disable this if you are using a third-party SEO plugin to avoid duplicate meta tags.</p>
 		</div>
 		<?php
 	}

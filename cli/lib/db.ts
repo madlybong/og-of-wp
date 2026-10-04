@@ -100,6 +100,25 @@ SET \`user_login\` = '${PROD_WP_ADMIN_USER}',
 WHERE \`user_login\` = 'admin' OR \`ID\` = 1;
 `;
 
-    log.info(`Hardening admin credentials in ${filePath}...`);
-    await appendFile(filePath, sqlAppend, "utf-8");
+	log.info(`Hardening admin credentials in ${filePath}...`);
+	await appendFile(filePath, sqlAppend, "utf-8");
+}
+
+export async function createDatabase(config: LocalEnvConfig | EnvConfig): Promise<void> {
+	const args = [
+		config.MYSQL_PATH,
+		"-u", config.LOCAL_DB_USER,
+		...(config.LOCAL_DB_PASS ? [`-p${config.LOCAL_DB_PASS}`] : []),
+		"-h", config.LOCAL_DB_HOST,
+		"-e", `CREATE DATABASE IF NOT EXISTS \`${config.LOCAL_DB_NAME}\`;`
+	];
+
+	log.info(`Ensuring database '${config.LOCAL_DB_NAME}' exists...`);
+	const proc = spawn(args, { stdout: "pipe", stderr: "pipe" });
+	const exitCode = await proc.exited;
+	
+	if (exitCode !== 0) {
+		const stderr = await new Response(proc.stderr).text();
+		throw new Error(`mysql database creation failed: ${stderr}`);
+	}
 }

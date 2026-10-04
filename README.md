@@ -119,10 +119,18 @@ bun start <command>
 
 | Command | Description |
 |---|---|
+| `init` | **Bootstraps a fresh WordPress ecosystem**. Downloads latest WP, auto-creates database, generates config, injects Contact Form 7, and scaffolds the OG Starter Theme. |
 | `package` | Interactively scans local WordPress directory, prompts for database export, compresses clean code (excluding git/staging), and creates a production-ready ZIP archive. |
 | `db:push` | Exports the local MySQL database, automatically performs domain search-and-replace, and generates an optimized production SQL file ready for server import. |
 | `db:pull` | Ingests a production SQL dump, replaces production domains with your local development URLs, and imports it directly into your local database. |
 | `backup` | Creates a full timestamped snapshot archive of your WordPress files and current database state. |
+
+### 🚀 The Ecosystem Bootstrapper (`init`)
+Running `bunx github:madlybong/og-of-wp init` completely standardizes new website creation. 
+It bypasses all bloat by injecting the **OG Starter Theme**—a minimalist, Gutenberg-first boilerplate that registers critical meta boxes (Hero sections, CTA buttons) *natively* to completely eliminate the need for Advanced Custom Fields (ACF).
+
+### 🎯 Native MVSEO Module
+No more Yoast or RankMath. The `og-of-wp` plugin now features a **Minimum Viable SEO** module. Because WordPress 5.5+ natively handles XML sitemaps and dynamic titles, our native module simply injects OpenGraph tags, Twitter cards, and custom meta description overrides into your `wp_head` without a single upsell banner or database bloat.
 
 ### Environment Configuration
 The CLI reads configuration automatically from your environment. You can create a `.env` file in the project directory:
