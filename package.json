@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "description": "The Original Gangster of WordPress: All-in-One Modular Security, Utilities & Modern Deploy CLI",
   "bin": {
-    "og-deploy": "./cli/cli.ts"
+    "og-deploy": "./dist/cli.js"
   },
   "scripts": {
     "start": "bun run ./cli/cli.ts",
