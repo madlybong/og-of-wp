@@ -22,10 +22,6 @@ export interface ProdEnvConfig {
     PROD_DB_PASS: string;
     PROD_DB_HOST: string;
     WP_TABLE_PREFIX: string;
-    SMTP_HOST: string;
-    SMTP_PORT: string;
-    SMTP_USER: string;
-    SMTP_PASS: string;
     PROD_WP_ADMIN_USER: string;
     PROD_WP_ADMIN_PASS: string;
     PROD_WP_ADMIN_EMAIL: string;
@@ -40,11 +36,10 @@ const LOCAL_KEYS = [
 
 const PROD_KEYS = [
     "PROD_URL", "PROD_DB_NAME", "PROD_DB_USER", "PROD_DB_PASS",
-    "PROD_DB_HOST", "WP_TABLE_PREFIX", "SMTP_HOST", "SMTP_PORT",
-    "SMTP_USER", "SMTP_PASS", "PROD_WP_ADMIN_USER", "PROD_WP_ADMIN_PASS", "PROD_WP_ADMIN_EMAIL"
+    "PROD_DB_HOST", "WP_TABLE_PREFIX", "PROD_WP_ADMIN_USER", "PROD_WP_ADMIN_PASS", "PROD_WP_ADMIN_EMAIL"
 ];
 
-const PASSWORD_KEYS = ["LOCAL_DB_PASS", "PROD_DB_PASS", "SMTP_PASS", "PROD_WP_ADMIN_PASS"];
+const PASSWORD_KEYS = ["LOCAL_DB_PASS", "PROD_DB_PASS", "PROD_WP_ADMIN_PASS"];
 
 const parseEnv = (path: string): Record<string, string> => {
     if (!existsSync(path)) {

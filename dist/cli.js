@@ -4737,15 +4737,11 @@ var init_env = __esm(() => {
     "PROD_DB_PASS",
     "PROD_DB_HOST",
     "WP_TABLE_PREFIX",
-    "SMTP_HOST",
-    "SMTP_PORT",
-    "SMTP_USER",
-    "SMTP_PASS",
     "PROD_WP_ADMIN_USER",
     "PROD_WP_ADMIN_PASS",
     "PROD_WP_ADMIN_EMAIL"
   ];
-  PASSWORD_KEYS = ["LOCAL_DB_PASS", "PROD_DB_PASS", "SMTP_PASS", "PROD_WP_ADMIN_PASS"];
+  PASSWORD_KEYS = ["LOCAL_DB_PASS", "PROD_DB_PASS", "PROD_WP_ADMIN_PASS"];
 });
 
 // cli/lib/db.ts
@@ -5137,30 +5133,6 @@ RewriteRule . /index.php [L]
 Options -Indexes
 `;
   await writeFile2(join2(stagingWpDir, ".htaccess"), htaccessContent, "utf-8");
-  log.info("Configuring Zero-Touch SMTP plugin...");
-  const muPluginsDir = join2(stagingWpDir, "wp-content", "mu-plugins");
-  if (!existsSync3(muPluginsDir)) {
-    await mkdir2(muPluginsDir, { recursive: true });
-  }
-  const smtpConfigContent = `<?php
-/**
- * Plugin Name: ${env.PROJECT_SLUG} Sovereign Mail Delivery
- * Description: Zero-touch PHPMailer SMTP auto-configuration.
- * Version: 1.0.0
- */
-add_action( 'phpmailer_init', function( $phpmailer ) {
-    $phpmailer->isSMTP();
-    $phpmailer->Host       = '${env.SMTP_HOST}';
-    $phpmailer->SMTPAuth   = true;
-    $phpmailer->Port       = ${env.SMTP_PORT};
-    $phpmailer->SMTPSecure = 'tls';
-    $phpmailer->Username   = '${env.SMTP_USER}';
-    $phpmailer->Password   = '${env.SMTP_PASS}';
-    $phpmailer->From       = '${env.SMTP_USER}';
-    $phpmailer->FromName   = '${env.PROJECT_SLUG}';
-} );
-`;
-  await writeFile2(join2(muPluginsDir, `${env.PROJECT_SLUG}-smtp-config.php`), smtpConfigContent, "utf-8");
   const dbPrompt = await prompt2({
     type: "confirm",
     name: "exportDb",
