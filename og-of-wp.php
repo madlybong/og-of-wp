@@ -3,7 +3,7 @@
  * Plugin Name: OG of WP
  * Plugin URI:  https://astrake.com/baddies/og-of-wp
  * Description: A complete, lightweight, and modular multi-purpose plugin for WordPress.
- * Version:     1.1.3
+ * Version:     1.1.4
  * Author:      Astrake
  * Author URI:  https://astrake.com/baddies/og-of-wp
  * License:     GPLv2 or later
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'OG_WP_VERSION', '1.1.3' );
+define( 'OG_WP_VERSION', '1.1.4' );
 define( 'OG_WP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 
 $og_wp_plugin_dir = function_exists( 'wp_normalize_path' ) ? wp_normalize_path( plugin_dir_path( __FILE__ ) ) : str_replace( '\\', '/', plugin_dir_path( __FILE__ ) );

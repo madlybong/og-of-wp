@@ -1,7 +1,6 @@
 import { spawn } from "bun";
-import { createReadStream, createWriteStream } from "fs";
-import { rename, appendFile } from "fs/promises";
-import { createInterface } from "readline";
+import { openSync, closeSync } from "fs";
+import { appendFile, readFile, writeFile } from "fs/promises";
 import { LocalEnvConfig, EnvConfig } from "./env";
 import { log } from "./logger";
 
@@ -15,8 +14,11 @@ export async function exportDb(config: LocalEnvConfig | EnvConfig, outputPath: s
     ];
 
     log.info(`Exporting local database to ${outputPath}...`);
-    const proc = spawn(args, { stdout: Bun.file(outputPath), stderr: "pipe" });
+    // Use native OS file descriptor to bypass Bun stream chunking bugs
+    const fd = openSync(outputPath, "w");
+    const proc = spawn(args, { stdout: fd, stderr: "pipe" });
     const exitCode = await proc.exited;
+    closeSync(fd);
     
     if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
@@ -36,8 +38,10 @@ export async function importDb(config: LocalEnvConfig | EnvConfig, sqlPath: stri
     ];
 
     log.info(`Importing ${sqlPath} into local database...`);
-    const proc = spawn(args, { stdin: Bun.file(sqlPath), stdout: "pipe", stderr: "pipe" });
+    const fd = openSync(sqlPath, "r");
+    const proc = spawn(args, { stdin: fd, stdout: "pipe", stderr: "pipe" });
     const exitCode = await proc.exited;
+    closeSync(fd);
     
     if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
@@ -46,40 +50,23 @@ export async function importDb(config: LocalEnvConfig | EnvConfig, sqlPath: stri
 }
 
 export async function searchReplaceSQL(filePath: string, from: string, to: string): Promise<void> {
-    const tempPath = `${filePath}.tmp-${Date.now()}`;
-    const readStream = createReadStream(filePath, { encoding: "utf-8" });
-    const writeStream = createWriteStream(tempPath, { encoding: "utf-8" });
+    // Read entirely into memory to avoid stream chunking boundary bugs
+    let content = await readFile(filePath, "utf-8");
+    
+    // Inject DROP TABLE IF EXISTS for all CREATE TABLE statements to prevent import conflicts
+    content = content.replace(/^CREATE TABLE (?:IF NOT EXISTS )?`([^`]+)`/gim, "DROP TABLE IF EXISTS `$1`;\nCREATE TABLE `$1`");
 
-    const rl = createInterface({
-        input: readStream,
-        crlfDelay: Infinity
-    });
-
-    const regex = new RegExp(`s:\\d+:"${from.replace(/[.*+?^$\\{}()|[\\]\\\\]/g, '\\$&')}"`, "g");
-    const toLength = Buffer.byteLength(to, 'utf8');
+    const regex = new RegExp(`s:\\d+:"${from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, "g");
+    const toLength = Buffer.byteLength(to, "utf8");
     const toStr = `s:${toLength}:"${to}"`;
 
-    for await (const line of rl) {
-        // Detect CREATE TABLE and inject DROP TABLE IF EXISTS to prevent import conflicts
-        const createTableMatch = line.match(/^CREATE TABLE (?:IF NOT EXISTS )?`([^`]+)`/i);
-        if (createTableMatch) {
-            writeStream.write(`DROP TABLE IF EXISTS \`${createTableMatch[1]}\`;\n`);
-        }
+    // Pass 1: Replace serialized strings
+    content = content.replace(regex, toStr);
+    
+    // Pass 2: Replace all other plain occurrences
+    content = content.split(from).join(to);
 
-        // Pass 1: Replace serialized strings
-        let processed = line.replace(regex, toStr);
-        // Pass 2: Replace all other plain occurrences
-        processed = processed.split(from).join(to);
-
-        writeStream.write(processed + "\n");
-    }
-
-    await new Promise<void>((resolve, reject) => {
-        writeStream.end(() => resolve());
-        writeStream.on("error", reject);
-    });
-
-    await rename(tempPath, filePath);
+    await writeFile(filePath, content, "utf-8");
 }
 
 export async function hardenAdminCredentialsSQL(filePath: string, config: Partial<EnvConfig>): Promise<void> {
@@ -125,7 +112,6 @@ export async function createDatabase(config: LocalEnvConfig | EnvConfig): Promis
 
 export async function getLocalTablePrefix(wpPath: string): Promise<string> {
 	const { join } = require("path");
-	const { readFile } = require("fs/promises");
 	const wpConfigPath = join(wpPath, "wp-config.php");
 	try {
 		const content = await readFile(wpConfigPath, "utf-8");
@@ -142,22 +128,11 @@ export async function renameDatabasePrefixSQL(filePath: string, oldPrefix: strin
 	
 	log.info(`Migrating database prefixes from '${oldPrefix}' to '${newPrefix}'...`);
 	
-	const tempPath = `${filePath}.prefix-${Date.now()}`;
-	const readStream = createReadStream(filePath, { encoding: "utf-8" });
-	const writeStream = createWriteStream(tempPath, { encoding: "utf-8" });
-
-	const rl = createInterface({
-		input: readStream,
-		crlfDelay: Infinity
-	});
+    let content = await readFile(filePath, "utf-8");
 
 	// Safely replace table references wrapped in backticks: e.g. `wp_posts` -> `vh_posts`
 	const prefixRegex = new RegExp(`\\\`${oldPrefix}`, "g");
-
-	for await (const line of rl) {
-		const processed = line.replace(prefixRegex, `\`${newPrefix}`);
-		writeStream.write(processed + "\n");
-	}
+    content = content.replace(prefixRegex, `\`${newPrefix}`);
 
 	// Append native WordPress meta key migrations
 	const sqlAppend = `\n
@@ -165,12 +140,7 @@ export async function renameDatabasePrefixSQL(filePath: string, oldPrefix: strin
 UPDATE \`${newPrefix}options\` SET option_name = REPLACE(option_name, '${oldPrefix}', '${newPrefix}') WHERE option_name LIKE '${oldPrefix}%';
 UPDATE \`${newPrefix}usermeta\` SET meta_key = REPLACE(meta_key, '${oldPrefix}', '${newPrefix}') WHERE meta_key LIKE '${oldPrefix}%';
 `;
-	writeStream.write(sqlAppend);
+    content += sqlAppend;
 
-	await new Promise<void>((resolve, reject) => {
-		writeStream.end(() => resolve());
-		writeStream.on("error", reject);
-	});
-
-	await rename(tempPath, filePath);
+    await writeFile(filePath, content, "utf-8");
 }

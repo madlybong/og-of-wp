@@ -4746,9 +4746,8 @@ var init_env = __esm(() => {
 
 // cli/lib/db.ts
 var {spawn } = globalThis.Bun;
-import { createReadStream, createWriteStream } from "fs";
-import { rename, appendFile } from "fs/promises";
-import { createInterface } from "readline";
+import { openSync, closeSync } from "fs";
+import { appendFile, readFile, writeFile } from "fs/promises";
 async function exportDb(config, outputPath) {
   const args = [
     config.MYSQLDUMP_PATH,
@@ -4760,8 +4759,10 @@ async function exportDb(config, outputPath) {
     config.LOCAL_DB_NAME
   ];
   log.info(`Exporting local database to ${outputPath}...`);
-  const proc = spawn(args, { stdout: Bun.file(outputPath), stderr: "pipe" });
+  const fd = openSync(outputPath, "w");
+  const proc = spawn(args, { stdout: fd, stderr: "pipe" });
   const exitCode = await proc.exited;
+  closeSync(fd);
   if (exitCode !== 0) {
     const stderr = await new Response(proc.stderr).text();
     throw new Error(`mysqldump failed: ${stderr}`);
@@ -4779,40 +4780,24 @@ async function importDb(config, sqlPath) {
     config.LOCAL_DB_NAME
   ];
   log.info(`Importing ${sqlPath} into local database...`);
-  const proc = spawn(args, { stdin: Bun.file(sqlPath), stdout: "pipe", stderr: "pipe" });
+  const fd = openSync(sqlPath, "r");
+  const proc = spawn(args, { stdin: fd, stdout: "pipe", stderr: "pipe" });
   const exitCode = await proc.exited;
+  closeSync(fd);
   if (exitCode !== 0) {
     const stderr = await new Response(proc.stderr).text();
     throw new Error(`mysql import failed: ${stderr}`);
   }
 }
 async function searchReplaceSQL(filePath, from, to) {
-  const tempPath = `${filePath}.tmp-${Date.now()}`;
-  const readStream = createReadStream(filePath, { encoding: "utf-8" });
-  const writeStream = createWriteStream(tempPath, { encoding: "utf-8" });
-  const rl = createInterface({
-    input: readStream,
-    crlfDelay: Infinity
-  });
-  const regex = new RegExp(`s:\\d+:"${from.replace(/[.*+?^$\\{}()|[\\]\\\\]/g, "\\$&")}"`, "g");
+  let content = await readFile(filePath, "utf-8");
+  content = content.replace(/^CREATE TABLE (?:IF NOT EXISTS )?`([^`]+)`/gim, "DROP TABLE IF EXISTS `$1`;\nCREATE TABLE `$1`");
+  const regex = new RegExp(`s:\\d+:"${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`, "g");
   const toLength = Buffer.byteLength(to, "utf8");
   const toStr = `s:${toLength}:"${to}"`;
-  for await (const line of rl) {
-    const createTableMatch = line.match(/^CREATE TABLE (?:IF NOT EXISTS )?`([^`]+)`/i);
-    if (createTableMatch) {
-      writeStream.write(`DROP TABLE IF EXISTS \`${createTableMatch[1]}\`;
-`);
-    }
-    let processed = line.replace(regex, toStr);
-    processed = processed.split(from).join(to);
-    writeStream.write(processed + `
-`);
-  }
-  await new Promise((resolve, reject) => {
-    writeStream.end(() => resolve());
-    writeStream.on("error", reject);
-  });
-  await rename(tempPath, filePath);
+  content = content.replace(regex, toStr);
+  content = content.split(from).join(to);
+  await writeFile(filePath, content, "utf-8");
 }
 async function hardenAdminCredentialsSQL(filePath, config) {
   const { PROD_WP_ADMIN_USER, PROD_WP_ADMIN_PASS, PROD_WP_ADMIN_EMAIL, WP_TABLE_PREFIX } = config;
@@ -4853,7 +4838,6 @@ async function createDatabase(config) {
 }
 async function getLocalTablePrefix(wpPath) {
   const { join } = __require("path");
-  const { readFile } = __require("fs/promises");
   const wpConfigPath = join(wpPath, "wp-config.php");
   try {
     const content = await readFile(wpConfigPath, "utf-8");
@@ -4868,31 +4852,17 @@ async function renameDatabasePrefixSQL(filePath, oldPrefix, newPrefix) {
   if (oldPrefix === newPrefix)
     return;
   log.info(`Migrating database prefixes from '${oldPrefix}' to '${newPrefix}'...`);
-  const tempPath = `${filePath}.prefix-${Date.now()}`;
-  const readStream = createReadStream(filePath, { encoding: "utf-8" });
-  const writeStream = createWriteStream(tempPath, { encoding: "utf-8" });
-  const rl = createInterface({
-    input: readStream,
-    crlfDelay: Infinity
-  });
+  let content = await readFile(filePath, "utf-8");
   const prefixRegex = new RegExp(`\\\`${oldPrefix}`, "g");
-  for await (const line of rl) {
-    const processed = line.replace(prefixRegex, `\`${newPrefix}`);
-    writeStream.write(processed + `
-`);
-  }
+  content = content.replace(prefixRegex, `\`${newPrefix}`);
   const sqlAppend = `
 
 -- Meta Key Prefix Migrations
 UPDATE \`${newPrefix}options\` SET option_name = REPLACE(option_name, '${oldPrefix}', '${newPrefix}') WHERE option_name LIKE '${oldPrefix}%';
 UPDATE \`${newPrefix}usermeta\` SET meta_key = REPLACE(meta_key, '${oldPrefix}', '${newPrefix}') WHERE meta_key LIKE '${oldPrefix}%';
 `;
-  writeStream.write(sqlAppend);
-  await new Promise((resolve, reject) => {
-    writeStream.end(() => resolve());
-    writeStream.on("error", reject);
-  });
-  await rename(tempPath, filePath);
+  content += sqlAppend;
+  await writeFile(filePath, content, "utf-8");
 }
 var init_db = __esm(() => {
   init_logger();
@@ -4935,7 +4905,7 @@ __export(exports_init, {
   default: () => init_default
 });
 import { existsSync as existsSync2 } from "fs";
-import { mkdir, writeFile, cp, rm } from "fs/promises";
+import { mkdir, writeFile as writeFile2, cp, rm } from "fs/promises";
 import { join } from "path";
 import { randomBytes } from "crypto";
 async function init_default(args) {
@@ -5027,7 +4997,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 require_once ABSPATH . 'wp-settings.php';
 `;
-  await writeFile(join(wpDir, "wp-config.php"), wpConfigContent, "utf-8");
+  await writeFile2(join(wpDir, "wp-config.php"), wpConfigContent, "utf-8");
   log.info("Cleaning up temporary files...");
   await rm(tempDir, { recursive: true, force: true });
   log.success("OG WP Ecosystem Initialized Successfully!");
@@ -5053,7 +5023,7 @@ __export(exports_package, {
   default: () => package_default
 });
 import { existsSync as existsSync3 } from "fs";
-import { rm as rm2, mkdir as mkdir2, cp as cp2, writeFile as writeFile2 } from "fs/promises";
+import { rm as rm2, mkdir as mkdir2, cp as cp2, writeFile as writeFile3 } from "fs/promises";
 import { join as join2 } from "path";
 import crypto from "crypto";
 async function package_default() {
@@ -5111,7 +5081,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 require_once ABSPATH . 'wp-settings.php';
 `;
-  await writeFile2(join2(stagingWpDir, "wp-config.php"), wpConfigContent, "utf-8");
+  await writeFile3(join2(stagingWpDir, "wp-config.php"), wpConfigContent, "utf-8");
   log.info("Generating production .htaccess...");
   const htaccessContent = `# BEGIN WordPress
 <IfModule mod_rewrite.c>
@@ -5132,7 +5102,7 @@ RewriteRule . /index.php [L]
 </Files>
 Options -Indexes
 `;
-  await writeFile2(join2(stagingWpDir, ".htaccess"), htaccessContent, "utf-8");
+  await writeFile3(join2(stagingWpDir, ".htaccess"), htaccessContent, "utf-8");
   const dbPrompt = await prompt2({
     type: "confirm",
     name: "exportDb",
