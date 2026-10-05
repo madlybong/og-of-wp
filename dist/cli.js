@@ -4855,6 +4855,49 @@ async function createDatabase(config) {
     throw new Error(`mysql database creation failed: ${stderr}`);
   }
 }
+async function getLocalTablePrefix(wpPath) {
+  const { join } = __require("path");
+  const { readFile } = __require("fs/promises");
+  const wpConfigPath = join(wpPath, "wp-config.php");
+  try {
+    const content = await readFile(wpConfigPath, "utf-8");
+    const match = content.match(/\$table_prefix\s*=\s*['"]([^'"]+)['"]/);
+    return match ? match[1] : "wp_";
+  } catch (err) {
+    log.warn(`Could not read wp-config.php at ${wpConfigPath}. Defaulting local prefix to 'wp_'.`);
+    return "wp_";
+  }
+}
+async function renameDatabasePrefixSQL(filePath, oldPrefix, newPrefix) {
+  if (oldPrefix === newPrefix)
+    return;
+  log.info(`Migrating database prefixes from '${oldPrefix}' to '${newPrefix}'...`);
+  const tempPath = `${filePath}.prefix-${Date.now()}`;
+  const readStream = createReadStream(filePath, { encoding: "utf-8" });
+  const writeStream = createWriteStream(tempPath, { encoding: "utf-8" });
+  const rl = createInterface({
+    input: readStream,
+    crlfDelay: Infinity
+  });
+  const prefixRegex = new RegExp(`\\\`${oldPrefix}`, "g");
+  for await (const line of rl) {
+    const processed = line.replace(prefixRegex, `\`${newPrefix}`);
+    writeStream.write(processed + `
+`);
+  }
+  const sqlAppend = `
+
+-- Meta Key Prefix Migrations
+UPDATE \`${newPrefix}options\` SET option_name = REPLACE(option_name, '${oldPrefix}', '${newPrefix}') WHERE option_name LIKE '${oldPrefix}%';
+UPDATE \`${newPrefix}usermeta\` SET meta_key = REPLACE(meta_key, '${oldPrefix}', '${newPrefix}') WHERE meta_key LIKE '${oldPrefix}%';
+`;
+  writeStream.write(sqlAppend);
+  await new Promise((resolve, reject) => {
+    writeStream.end(() => resolve());
+    writeStream.on("error", reject);
+  });
+  await rename(tempPath, filePath);
+}
 var init_db = __esm(() => {
   init_logger();
 });
@@ -5129,6 +5172,10 @@ add_action( 'phpmailer_init', function( $phpmailer ) {
     log.info("Exporting and preparing database...");
     sqlFile = join2(process.cwd(), `${env.PROJECT_SLUG}-import-${dateStr}.sql`);
     await exportDb(env, sqlFile);
+    const localPrefix = await getLocalTablePrefix(env.LOCAL_WP_PATH);
+    if (localPrefix !== env.WP_TABLE_PREFIX) {
+      await renameDatabasePrefixSQL(sqlFile, localPrefix, env.WP_TABLE_PREFIX);
+    }
     await searchReplaceSQL(sqlFile, env.LOCAL_URL, env.PROD_URL);
     await hardenAdminCredentialsSQL(sqlFile, env);
     log.success(`Database exported to separate SQL file: ${sqlFile}`);
@@ -5165,6 +5212,10 @@ async function db_push_default() {
   const dateStr = new Date().toISOString().split("T")[0];
   const outputFile = `${env.PROJECT_SLUG}-push-${dateStr}.sql`;
   await exportDb(env, outputFile);
+  const localPrefix = await getLocalTablePrefix(env.LOCAL_WP_PATH);
+  if (localPrefix !== env.WP_TABLE_PREFIX) {
+    await renameDatabasePrefixSQL(outputFile, localPrefix, env.WP_TABLE_PREFIX);
+  }
   log.info("Rewriting URLs for production...");
   await searchReplaceSQL(outputFile, env.LOCAL_URL, env.PROD_URL);
   await hardenAdminCredentialsSQL(outputFile, env);

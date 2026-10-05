@@ -1,6 +1,6 @@
 import { getEnv } from "../lib/env";
 import { createZip } from "../lib/zip";
-import { exportDb, searchReplaceSQL, hardenAdminCredentialsSQL } from "../lib/db";
+import { exportDb, searchReplaceSQL, hardenAdminCredentialsSQL, getLocalTablePrefix, renameDatabasePrefixSQL } from "../lib/db";
 import { log } from "../lib/logger";
 import { existsSync } from "fs";
 import { rm, mkdir, cp, writeFile } from "fs/promises";
@@ -138,6 +138,13 @@ add_action( 'phpmailer_init', function( $phpmailer ) {
         // Output separate side-by-side SQL file in working directory (NOT inside staging)
         sqlFile = join(process.cwd(), `${env.PROJECT_SLUG}-import-${dateStr}.sql`);
         await exportDb(env, sqlFile);
+        
+        // Handle Prefix Migration
+        const localPrefix = await getLocalTablePrefix(env.LOCAL_WP_PATH);
+        if (localPrefix !== env.WP_TABLE_PREFIX) {
+            await renameDatabasePrefixSQL(sqlFile, localPrefix, env.WP_TABLE_PREFIX);
+        }
+
         await searchReplaceSQL(sqlFile, env.LOCAL_URL, env.PROD_URL);
         await hardenAdminCredentialsSQL(sqlFile, env);
         log.success(`Database exported to separate SQL file: ${sqlFile}`);

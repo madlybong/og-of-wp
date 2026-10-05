@@ -1,5 +1,5 @@
 import { getEnv } from "../lib/env";
-import { exportDb, searchReplaceSQL, hardenAdminCredentialsSQL } from "../lib/db";
+import { exportDb, searchReplaceSQL, hardenAdminCredentialsSQL, getLocalTablePrefix, renameDatabasePrefixSQL } from "../lib/db";
 import { log } from "../lib/logger";
 
 export default async function () {
@@ -11,6 +11,12 @@ export default async function () {
     
     await exportDb(env, outputFile);
     
+    // Handle Prefix Migration
+    const localPrefix = await getLocalTablePrefix(env.LOCAL_WP_PATH);
+    if (localPrefix !== env.WP_TABLE_PREFIX) {
+        await renameDatabasePrefixSQL(outputFile, localPrefix, env.WP_TABLE_PREFIX);
+    }
+
     log.info("Rewriting URLs for production...");
     await searchReplaceSQL(outputFile, env.LOCAL_URL, env.PROD_URL);
     await hardenAdminCredentialsSQL(outputFile, env);

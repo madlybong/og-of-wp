@@ -122,3 +122,55 @@ export async function createDatabase(config: LocalEnvConfig | EnvConfig): Promis
 		throw new Error(`mysql database creation failed: ${stderr}`);
 	}
 }
+
+export async function getLocalTablePrefix(wpPath: string): Promise<string> {
+	const { join } = require("path");
+	const { readFile } = require("fs/promises");
+	const wpConfigPath = join(wpPath, "wp-config.php");
+	try {
+		const content = await readFile(wpConfigPath, "utf-8");
+		const match = content.match(/\$table_prefix\s*=\s*['"]([^'"]+)['"]/);
+		return match ? match[1] : "wp_";
+	} catch (err) {
+		log.warn(`Could not read wp-config.php at ${wpConfigPath}. Defaulting local prefix to 'wp_'.`);
+		return "wp_";
+	}
+}
+
+export async function renameDatabasePrefixSQL(filePath: string, oldPrefix: string, newPrefix: string): Promise<void> {
+	if (oldPrefix === newPrefix) return;
+	
+	log.info(`Migrating database prefixes from '${oldPrefix}' to '${newPrefix}'...`);
+	
+	const tempPath = `${filePath}.prefix-${Date.now()}`;
+	const readStream = createReadStream(filePath, { encoding: "utf-8" });
+	const writeStream = createWriteStream(tempPath, { encoding: "utf-8" });
+
+	const rl = createInterface({
+		input: readStream,
+		crlfDelay: Infinity
+	});
+
+	// Safely replace table references wrapped in backticks: e.g. `wp_posts` -> `vh_posts`
+	const prefixRegex = new RegExp(`\\\`${oldPrefix}`, "g");
+
+	for await (const line of rl) {
+		const processed = line.replace(prefixRegex, `\`${newPrefix}`);
+		writeStream.write(processed + "\n");
+	}
+
+	// Append native WordPress meta key migrations
+	const sqlAppend = `\n
+-- Meta Key Prefix Migrations
+UPDATE \`${newPrefix}options\` SET option_name = REPLACE(option_name, '${oldPrefix}', '${newPrefix}') WHERE option_name LIKE '${oldPrefix}%';
+UPDATE \`${newPrefix}usermeta\` SET meta_key = REPLACE(meta_key, '${oldPrefix}', '${newPrefix}') WHERE meta_key LIKE '${oldPrefix}%';
+`;
+	writeStream.write(sqlAppend);
+
+	await new Promise<void>((resolve, reject) => {
+		writeStream.end(() => resolve());
+		writeStream.on("error", reject);
+	});
+
+	await rename(tempPath, filePath);
+}

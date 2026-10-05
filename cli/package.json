@@ -1,6 +1,6 @@
 {
   "name": "og-deploy-cli",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "scripts": {
     "deploy": "bun run cli.ts"
   },
